@@ -40,6 +40,9 @@ environment variables make renders reproducible:
 | `BIBLETIME_PREFS` | `{"layout":"book","theme":"night"}` | Override stored settings (keys as in `Preferences.swift`). |
 | `BIBLETIME_REF` | `EST 8:9` | Force a verse by USFM book code, whatever the time. |
 
+`Tools/build_from_biblia.py` builds a translation file from the Biblia API for personal import; it reuses the flag
+heuristics from `build_verses.py` and has no tests that hit the network (its parser is exercised by hand with `--only`).
+
 `SaverHost` takes `--out`, `--width`, `--height`, `--seconds` (how long to pump the run loop) and `--preview`
 (instantiate the view the way System Settings' thumbnail does).
 

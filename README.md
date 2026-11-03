@@ -93,6 +93,19 @@ checked (whole Bible, USFM book codes, a unique id) and copied into the screen s
 sent anywhere. **Remove** deletes it again. You can also drop a converted file into
 `~/Library/Application Support/BibleTime/Translations/` by hand.
 
+If you have a [Biblia API](https://bibliaapi.com) key (Logos users often do; the Logos connector uses one), a second
+converter pulls a translation straight from that API, which carries the Legacy Standard Bible among others:
+
+```bash
+export BIBLIA_API_KEY=your-key
+python3 -I Tools/build_from_biblia.py --bible lgcystndrdbblsb --id lsb --name "Legacy Standard Bible" \
+    --abbreviation LSB --publisher "The Lockman Foundation" \
+    --license "Copyright 2021 The Lockman Foundation. Personal use only." --out ~/Desktop/lsb.json
+```
+
+It fetches the 837 chapters the clock can reach at two per second, caches the responses so it can resume, and writes the same
+file format. Try `--only "John 3,Psalm 23"` first to check your key.
+
 The conversion runs on your machine and the result stays there. Please do not commit converted copyrighted
 text to this repository or share it; respect the publisher's terms.
 

@@ -571,8 +571,7 @@ def build_translation(source, copr, tid, name, abbreviation, url, curated, hours
         require_file(copr, "copr.htm from the same zip" + ("; download %s" % url if url else ""))
     if not re.match(r"^[a-z0-9][a-z0-9_-]*$", tid):
         sys.exit("error: --id must be lowercase letters, digits, - or _ (got %r)" % tid)
-    whitelist = whitelist_from(curated or default_list("curated_verses.json"),
-                               hours or default_list("hour_verses.json"))
+    whitelist = whitelist_from(curated, hours)
     meta = parse_copr(copr) if copr else {"edition": name, "sourceFilesDated": "", "generated": ""}
     log("[%s] parsing %s" % (tid, source))
     verses, chapters, bridged = parse_usfx(source)
@@ -886,10 +885,10 @@ def main(argv=None):
     args = ap.parse_args(argv)
 
     if args.cmd == "build":
-        curated = load_curated(args.curated)
-        hours = load_hours(args.hours)
+        curated = load_curated(args.curated or default_list("curated_verses.json"))
+        hours = load_hours(args.hours or default_list("hour_verses.json"))
         build_translation(args.source, args.copr, args.id, args.name, args.abbreviation,
-                          args.url, args.curated, args.hours, args.out,
+                          args.url, curated, hours, args.out,
                           publisher=args.publisher, license_text=args.license)
         return 0
 
