@@ -191,8 +191,10 @@ def main():
     log("[%s] fetching %d chapters from Biblia (%s)" % (args.id, len(targets), args.bible))
     verses = {}
     cached = 0
+    single_chapter = {b["code"] for b in books if b["chapters"] == 1}
     for i, (code, name, chapter) in enumerate(targets, 1):
-        passage = "%s %d" % (name, chapter)
+        # "Jude 1" would mean Jude verse 1 to the API; the bare book name returns the whole single chapter.
+        passage = name if code in single_chapter else "%s %d" % (name, chapter)
         text, from_cache = fetch(args.bible, passage, key, cache_dir, args.delay)
         cached += from_cache
         got = parse_chapter(text, code, chapter)
