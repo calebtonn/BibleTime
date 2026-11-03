@@ -157,23 +157,31 @@ final class ConfigureSheet: NSObject {
         return l
     }
 
+    /// Bundled translations first, a separator, then imported ones. Each menu item carries its translation id.
     private func reloadTranslationPopup(selecting id: String) {
         translations = actions.list()
         translationPopup.removeAllItems()
         if translations.isEmpty {
             translationPopup.addItem(withTitle: "No translations found")
         }
+        var separatorAdded = false
         for info in translations {
-            translationPopup.addItem(withTitle: info.isImported ? "\(info.displayName) — imported" : info.displayName)
+            if info.isImported, !separatorAdded, translationPopup.numberOfItems > 0 {
+                translationPopup.menu?.addItem(.separator())
+                separatorAdded = true
+            }
+            translationPopup.addItem(withTitle: info.displayName)
+            translationPopup.lastItem?.representedObject = info.id
         }
-        let index = translations.firstIndex { $0.id == id } ?? 0
-        translationPopup.selectItem(at: index)
+        let item = translationPopup.itemArray.first { ($0.representedObject as? String) == id }
+            ?? translationPopup.itemArray.first { $0.representedObject != nil }
+        if let item { translationPopup.select(item) }
         updateRemoveButton()
     }
 
     private var selectedTranslation: TranslationInfo? {
-        let i = translationPopup.indexOfSelectedItem
-        return translations.indices.contains(i) ? translations[i] : nil
+        guard let id = translationPopup.selectedItem?.representedObject as? String else { return nil }
+        return translations.first { $0.id == id }
     }
 
     private func updateRemoveButton() {
