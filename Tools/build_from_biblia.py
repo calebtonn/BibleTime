@@ -53,7 +53,8 @@ PARAMS = {
 # The API does not honour "\n" in the template, so a chapter arrives as one line:
 # "3:1<TAB>text 3:2<TAB>text ...". Psalm superscriptions come as "23:<TAB>A Psalm of David."
 # with no verse number. Verses are therefore split on the markers, not on lines.
-MARKER = re.compile(r"(?:^|\s)(\d+):(\d*)(?:-(\d+))?\t")
+# In single-chapter books (Jude, Philemon, ...) the [ChapterNum] token becomes the short book name ("Jud:1").
+MARKER = re.compile(r"(?:^|\s)(\d+|[A-Za-z]+):(\d*)(?:-(\d+))?\t")
 
 
 def log(msg):
@@ -128,7 +129,8 @@ def parse_chapter(text, code, chapter):
     verses = {}
     markers = list(MARKER.finditer(text))
     for i, m in enumerate(markers):
-        c, v = int(m.group(1)), m.group(2)
+        c = int(m.group(1)) if m.group(1).isdigit() else 1
+        v = m.group(2)
         if c != chapter or not v:
             continue  # another chapter's spill-over, or a superscription/heading without a verse number
         start = m.end()
