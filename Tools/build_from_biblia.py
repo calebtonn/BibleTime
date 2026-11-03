@@ -50,8 +50,10 @@ PARAMS = {
     "fullText": "false",
     "eachVerse": "[ChapterNum]:[VerseNum]\t[VerseText]\n",
 }
-VERSE_LINE = re.compile(r"^(\d+):(\d+)\t(.*)$")
-RANGE_LINE = re.compile(r"^(\d+):(\d+)-(\d+)\t(.*)$")
+# The API does not honour "\n" in the template, so a chapter arrives as one line:
+# "3:1<TAB>text 3:2<TAB>text ...". Psalm superscriptions come as "23:<TAB>A Psalm of David."
+# with no verse number. Verses are therefore split on the markers, not on lines.
+MARKER = re.compile(r"(?:^|\s)(\d+):(\d*)(?:-(\d+))?\t")
 
 
 def log(msg):
@@ -110,39 +112,34 @@ def fetch(bible, passage, key, cache_dir, delay, retries=4):
     return text, False
 
 
+def balance_quotes(text):
+    """Translations in the NASB tradition open every verse of continuing speech with a quotation mark that
+    closes verses later. Shown alone, such a verse would carry a stray mark, so drop an unmatched leading
+    opening quote or trailing closing quote (matched pairs inside the verse are kept)."""
+    if text.startswith("\u201c") and "\u201d" not in text:
+        text = text[1:].lstrip()
+    if text.endswith("\u201d") and "\u201c" not in text:
+        text = text[:-1].rstrip()
+    return text
+
+
 def parse_chapter(text, code, chapter):
-    """Return {(code, chapter, verse): text}. Continuation lines (poetry) are joined to the verse above."""
+    """Return {(code, chapter, verse): text} for one chapter's response."""
     verses = {}
-    current = None
-    for raw in text.splitlines():
-        line = raw.rstrip()
-        if not line.strip():
-            continue
-        m = VERSE_LINE.match(line)
-        if m:
-            c, v, t = int(m.group(1)), int(m.group(2)), m.group(3)
-            if c != chapter:
-                continue
-            current = (code, chapter, v)
-            verses[current] = t.strip()
-            continue
-        m = RANGE_LINE.match(line)
-        if m:
-            # A bridged verse ("3:5-6"): store under the first number, like build_verses.py does.
-            c, v, t = int(m.group(1)), int(m.group(2)), m.group(4)
-            if c != chapter:
-                continue
-            current = (code, chapter, v)
-            verses[current] = t.strip()
-            continue
-        if current is not None:
-            verses[current] = (verses[current] + " " + line.strip()).strip()
-    cleaned = {}
-    for key, value in verses.items():
-        value = value.replace("¶", " ")
-        value = re.sub(r"\s+", " ", value).strip()
-        cleaned[key] = value
-    return cleaned
+    markers = list(MARKER.finditer(text))
+    for i, m in enumerate(markers):
+        c, v = int(m.group(1)), m.group(2)
+        if c != chapter or not v:
+            continue  # another chapter's spill-over, or a superscription/heading without a verse number
+        start = m.end()
+        end = markers[i + 1].start() if i + 1 < len(markers) else len(text)
+        body = text[start:end].replace("\u00b6", " ")
+        body = re.sub(r"\s+", " ", body).strip()
+        body = balance_quotes(body)
+        if body:
+            # A bridged verse ("3:5-6") is stored under the first number, like build_verses.py does.
+            verses[(code, chapter, int(v))] = body
+    return verses
 
 
 def main():
