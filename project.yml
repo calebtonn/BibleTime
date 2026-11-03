@@ -1,0 +1,61 @@
+# XcodeGen spec. Run `make xcodeproj` (which exports VERSION and BUILD) to produce BibleTime.xcodeproj.
+# The Makefile is the primary, verified build path; this project exists for people who prefer Xcode.
+name: BibleTime
+options:
+  bundleIdPrefix: com.calebtonn
+  deploymentTarget:
+    macOS: "12.0"
+  xcodeVersion: "16.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MACOSX_DEPLOYMENT_TARGET: "12.0"
+    MARKETING_VERSION: "${VERSION}"
+    CURRENT_PROJECT_VERSION: "${BUILD}"
+targets:
+  BibleTime:
+    type: bundle
+    platform: macOS
+    sources:
+      - path: Sources/BibleTimeCore
+      - path: Sources/BibleTime
+        excludes: ["Info.plist"]
+      # Resources must land directly in Contents/Resources, matching the Makefile layout the loader expects.
+      - path: Resources/books.json
+        buildPhase: resources
+      - path: Resources/curated.json
+        buildPhase: resources
+      - path: Resources/hour_verses.json
+        buildPhase: resources
+      - path: Resources/Translations
+        type: folder
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.calebtonn.BibleTime
+        INFOPLIST_FILE: Sources/BibleTime/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        WRAPPER_EXTENSION: saver
+        PRODUCT_NAME: BibleTime
+        MACH_O_TYPE: mh_bundle
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_STYLE: Manual
+        INSTALL_PATH: "$(HOME)/Library/Screen Savers"
+        COMBINE_HIDPI_IMAGES: YES
+        SKIP_INSTALL: NO
+    dependencies:
+      - sdk: ScreenSaver.framework
+      - sdk: AppKit.framework
+  SaverHost:
+    type: tool
+    platform: macOS
+    sources: [Tools/SaverHost.swift]
+    dependencies:
+      - sdk: ScreenSaver.framework
+      - sdk: AppKit.framework
+  CoreTests:
+    type: tool
+    platform: macOS
+    sources:
+      - Sources/BibleTimeCore
+      - Tests/CoreTests

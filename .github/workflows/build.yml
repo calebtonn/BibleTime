@@ -1,0 +1,75 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Toolchain
+        run: |
+          xcrun --show-sdk-path
+          swift --version
+
+      - name: Unit tests
+        run: make test
+
+      - name: Build screen saver
+        run: make
+
+      - name: Verify bundle
+        run: |
+          codesign --verify --deep --strict build/BibleTime.saver
+          lipo -info build/BibleTime.saver/Contents/MacOS/BibleTime
+          P=build/BibleTime.saver/Contents/Info.plist
+          plutil -lint "$P"
+          test "$(plutil -extract CFBundleIdentifier raw "$P")" = com.calebtonn.BibleTime
+          test "$(plutil -extract CFBundleShortVersionString raw "$P")" = "$(cat VERSION)"
+          ! grep -q '\$(' "$P"
+          test -f build/BibleTime.saver/Contents/Resources/Translations/kjv.json
+
+      - name: SwiftPM core package
+        run: |
+          swift build
+          swift run CoreTests Resources
+
+      - name: Render screenshots
+        run: make render
+
+      - name: Check generated data is up to date
+        run: make check-data
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: renders
+          path: build/renders/
+
+      - name: Package
+        run: |
+          make dist
+          rm -rf build/unzipped && mkdir build/unzipped
+          unzip -q build/BibleTime-*.zip -d build/unzipped
+          codesign --verify --deep --strict build/unzipped/BibleTime.saver
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BibleTime.saver
+          path: build/BibleTime-*.zip
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/BibleTime-*.zip
+          generate_release_notes: true
