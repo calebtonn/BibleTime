@@ -2,11 +2,25 @@ import AppKit
 
 /// The Options sheet shown by System Settings. Built in code (no nib) so the bundle can be assembled without Xcode.
 final class ConfigureSheet: NSObject {
+    /// What the sheet needs from its owner to manage translations.
+    struct TranslationActions {
+        /// Current list (bundled first, then imported).
+        var list: () -> [TranslationInfo]
+        /// Validate and copy a file chosen by the user; returns the new entry.
+        var importFile: (URL) throws -> TranslationInfo
+        /// Delete an imported translation.
+        var remove: (TranslationInfo) throws -> Void
+    }
+
     let window: NSWindow
     private var preferences: Preferences
     private let completion: (Preferences?) -> Void
+    private let actions: TranslationActions
+    private var translations: [TranslationInfo]
 
     private let translationPopup = NSPopUpButton()
+    private let importButton = NSButton(title: "Import…", target: nil, action: nil)
+    private let removeButton = NSButton(title: "Remove", target: nil, action: nil)
     private let hourPopup = NSPopUpButton()
     private let themePopup = NSPopUpButton()
     private let layoutPopup = NSPopUpButton()
@@ -17,13 +31,13 @@ final class ConfigureSheet: NSObject {
     private let famousCheck = NSButton(checkboxWithTitle: "Prefer well-known verses (John 3:16 at 3:16)", target: nil, action: nil)
     private let extendCheck = NSButton(checkboxWithTitle: "Complete the sentence when a verse ends mid-thought", target: nil, action: nil)
     private let padCheck = NSButton(checkboxWithTitle: "Pad the reference like a clock (John 03:16)", target: nil, action: nil)
-    private let translations: [TranslationInfo]
 
-    init(preferences: Preferences, translations: [TranslationInfo], completion: @escaping (Preferences?) -> Void) {
+    init(preferences: Preferences, actions: TranslationActions, completion: @escaping (Preferences?) -> Void) {
         self.preferences = preferences
-        self.translations = translations
+        self.actions = actions
+        self.translations = actions.list()
         self.completion = completion
-        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 480, height: 420),
+        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 440),
                           styleMask: [.titled, .closable], backing: .buffered, defer: false)
         super.init()
         window.title = "BibleTime Options"
@@ -41,11 +55,24 @@ final class ConfigureSheet: NSObject {
             p.target = self
             p.action = #selector(controlChanged)
         }
-        popup(translationPopup, titles: translations.isEmpty ? ["King James Version"] : translations.map { "\($0.name) (\($0.abbreviation))" })
+        reloadTranslationPopup(selecting: preferences.translation)
+        translationPopup.target = self
+        translationPopup.action = #selector(controlChanged)
         popup(hourPopup, titles: HourStyle.allCases.map(\.title))
         popup(themePopup, titles: Theme.allCases.map(\.title))
         popup(layoutPopup, titles: LayoutStyle.allCases.map(\.title))
         popup(typefacePopup, titles: TypefaceChoice.allCases.map(\.title))
+
+        importButton.target = self
+        importButton.action = #selector(importTranslation)
+        importButton.toolTip = "Add a translation file made with Tools/build_verses.py (for a copy you are licensed to use)."
+        removeButton.target = self
+        removeButton.action = #selector(removeTranslation)
+        let translationRow = NSStackView(views: [translationPopup, importButton, removeButton])
+        translationRow.orientation = .horizontal
+        translationRow.spacing = 6
+        translationPopup.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        translationPopup.widthAnchor.constraint(greaterThanOrEqualToConstant: 250).isActive = true
 
         sizeSlider.minValue = Preferences.textScaleRange.lowerBound
         sizeSlider.maxValue = Preferences.textScaleRange.upperBound
@@ -67,7 +94,7 @@ final class ConfigureSheet: NSObject {
         sizeRow.spacing = 8
 
         let grid = NSGridView(views: [
-            [label("Translation:"), translationPopup],
+            [label("Translation:"), translationRow],
             [label("Hours:"), hourPopup],
             [label("Appearance:"), themePopup],
             [label("Layout:"), layoutPopup],
@@ -81,7 +108,7 @@ final class ConfigureSheet: NSObject {
         grid.rowSpacing = 10
         grid.columnSpacing = 12
         grid.column(at: 0).xPlacement = .trailing
-        grid.column(at: 1).width = 300
+        grid.column(at: 1).width = 400
         grid.rowAlignment = .firstBaseline
 
         let title = NSTextField(labelWithString: "BibleTime")
@@ -89,7 +116,7 @@ final class ConfigureSheet: NSObject {
         let subtitle = NSTextField(wrappingLabelWithString: "The chapter is the hour and the verse is the minute. At 3:16 you'll see John 3:16.")
         subtitle.textColor = .secondaryLabelColor
         subtitle.font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
-        subtitle.preferredMaxLayoutWidth = 420
+        subtitle.preferredMaxLayoutWidth = 500
 
         let defaultsButton = NSButton(title: "Restore Defaults", target: self, action: #selector(restoreDefaults))
         let cancel = NSButton(title: "Cancel", target: self, action: #selector(cancel(_:)))
@@ -130,10 +157,33 @@ final class ConfigureSheet: NSObject {
         return l
     }
 
+    private func reloadTranslationPopup(selecting id: String) {
+        translations = actions.list()
+        translationPopup.removeAllItems()
+        if translations.isEmpty {
+            translationPopup.addItem(withTitle: "No translations found")
+        }
+        for info in translations {
+            translationPopup.addItem(withTitle: info.isImported ? "\(info.displayName) — imported" : info.displayName)
+        }
+        let index = translations.firstIndex { $0.id == id } ?? 0
+        translationPopup.selectItem(at: index)
+        updateRemoveButton()
+    }
+
+    private var selectedTranslation: TranslationInfo? {
+        let i = translationPopup.indexOfSelectedItem
+        return translations.indices.contains(i) ? translations[i] : nil
+    }
+
+    private func updateRemoveButton() {
+        removeButton.isEnabled = selectedTranslation?.isImported == true
+    }
+
     // MARK: State
 
     private func apply(_ p: Preferences) {
-        if let i = translations.firstIndex(where: { $0.id == p.translation }) { translationPopup.selectItem(at: i) }
+        reloadTranslationPopup(selecting: p.translation)
         hourPopup.selectItem(at: HourStyle.allCases.firstIndex(of: p.hourStyle) ?? 0)
         themePopup.selectItem(at: Theme.allCases.firstIndex(of: p.theme) ?? 0)
         layoutPopup.selectItem(at: LayoutStyle.allCases.firstIndex(of: p.layout) ?? 0)
@@ -148,7 +198,7 @@ final class ConfigureSheet: NSObject {
 
     private func read() -> Preferences {
         var p = Preferences()
-        if !translations.isEmpty, translationPopup.indexOfSelectedItem >= 0 { p.translation = translations[translationPopup.indexOfSelectedItem].id }
+        if let selected = selectedTranslation { p.translation = selected.id }
         p.hourStyle = HourStyle.allCases[max(0, hourPopup.indexOfSelectedItem)]
         p.theme = Theme.allCases[max(0, themePopup.indexOfSelectedItem)]
         p.layout = LayoutStyle.allCases[max(0, layoutPopup.indexOfSelectedItem)]
@@ -169,10 +219,55 @@ final class ConfigureSheet: NSObject {
 
     @objc private func controlChanged(_ sender: Any?) {
         updateSizeLabel()
+        updateRemoveButton()
     }
 
     @objc private func restoreDefaults(_ sender: Any?) {
         apply(Preferences())
+    }
+
+    @objc private func importTranslation(_ sender: Any?) {
+        let panel = NSOpenPanel()
+        panel.title = "Import a Translation"
+        panel.message = "Choose a translation file made with Tools/build_verses.py. You are responsible for holding a license to the text."
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.json]
+        panel.beginSheetModal(for: window) { [weak self] response in
+            guard let self, response == .OK, let url = panel.url else { return }
+            do {
+                let info = try self.actions.importFile(url)
+                self.reloadTranslationPopup(selecting: info.id)
+            } catch {
+                self.showError("Could not import \(url.lastPathComponent)", detail: "\(error)")
+            }
+        }
+    }
+
+    @objc private func removeTranslation(_ sender: Any?) {
+        guard let info = selectedTranslation, info.isImported else { return }
+        let alert = NSAlert()
+        alert.messageText = "Remove \(info.name)?"
+        alert.informativeText = "The imported file will be deleted. The bundled translations are not affected."
+        alert.addButton(withTitle: "Remove")
+        alert.addButton(withTitle: "Cancel")
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard let self, response == .alertFirstButtonReturn else { return }
+            do {
+                try self.actions.remove(info)
+                self.reloadTranslationPopup(selecting: Preferences().translation)
+            } catch {
+                self.showError("Could not remove \(info.name)", detail: "\(error)")
+            }
+        }
+    }
+
+    private func showError(_ message: String, detail: String) {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = message
+        alert.informativeText = detail
+        alert.beginSheetModal(for: window)
     }
 
     @objc private func save(_ sender: Any?) {

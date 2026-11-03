@@ -66,7 +66,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the development loop.
 
 | Setting | Values | Default |
 | --- | --- | --- |
-| Translation | KJV, WEB, ASV | KJV |
+| Translation | KJV, WEB, ASV, or any you import | KJV |
 | Hours | Follow System, 12-hour, 24-hour | Follow System |
 | Appearance | Automatic, Paper, Night | Automatic (Night in dark mode or 8 pm–7 am) |
 | Layout | Clock, Centered, Book | Clock |
@@ -76,6 +76,25 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the development loop.
 | Prefer well-known verses | on/off | on |
 | Complete the sentence | on/off | on |
 | Pad the reference like a clock | on/off | on ("John 03:16") |
+
+## Other translations (ESV, CSB, LSB, NIV …)
+
+Modern translations are copyrighted, so BibleTime cannot ship them. If you hold a copy you are licensed to
+use (for example a USFX export of a module you bought), you can convert it and import it for your own use:
+
+```bash
+python3 -I Tools/build_verses.py build --source my-esv.usfx.xml --id esv \
+    --name "English Standard Version" --abbreviation ESV \
+    --publisher Crossway --license "Copyright 2001 Crossway. Personal use only." --out ~/Desktop/esv.json
+```
+
+Then open **Options…**, click **Import…** next to the translation menu, and choose the file. The import is
+checked (whole Bible, USFM book codes, a unique id) and copied into the screen saver's own folder; nothing is
+sent anywhere. **Remove** deletes it again. You can also drop a converted file into
+`~/Library/Application Support/BibleTime/Translations/` by hand.
+
+The conversion runs on your machine and the result stays there. Please do not commit converted copyrighted
+text to this repository or share it; respect the publisher's terms.
 
 ## How a verse is chosen
 

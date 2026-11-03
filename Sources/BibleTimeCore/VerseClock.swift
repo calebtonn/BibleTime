@@ -32,13 +32,31 @@ public final class VerseClock: @unchecked Sendable {
         }
     }
 
+    /// Directories searched for user-imported translations, most preferred first. The first one is where imports
+    /// are written. Inside the screen saver sandbox the Application Support directory resolves to the
+    /// legacyScreenSaver container; the second entry is the real home directory, which the sandbox can read, so a
+    /// file can also be dropped at `~/Library/Application Support/BibleTime/Translations/` by hand.
+    public static func defaultImportDirectories() -> [URL] {
+        var urls: [URL] = []
+        if let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
+            urls.append(support.appendingPathComponent("BibleTime/Translations", isDirectory: true))
+        }
+        if let home = getpwuid(getuid())?.pointee.pw_dir.map({ String(cString: $0) }) {
+            urls.append(URL(fileURLWithPath: home).appendingPathComponent("Library/Application Support/BibleTime/Translations", isDirectory: true))
+        }
+        var unique: [URL] = []
+        for url in urls where !unique.contains(where: { $0.standardizedFileURL.path == url.standardizedFileURL.path }) { unique.append(url) }
+        return unique
+    }
+
     /// `resources` is the bundle's resource directory: it must contain `books.json`, `curated.json`,
-    /// `hour_verses.json` and a `Translations/` folder.
-    public init(resources: URL) throws {
+    /// `hour_verses.json` and a `Translations/` folder. `importDirectories` default to `defaultImportDirectories()`.
+    public init(resources: URL, importDirectories: [URL]? = nil) throws {
         let books = resources.appendingPathComponent("books.json")
         guard let booksData = FileManager.default.contents(atPath: books.path) else { throw LoadError.missing("books.json") }
         canon = try Canon(data: booksData)
-        catalog = TranslationCatalog(canon: canon, translationsDirectory: resources.appendingPathComponent("Translations"))
+        catalog = TranslationCatalog(canon: canon, translationsDirectory: resources.appendingPathComponent("Translations"),
+                                     importDirectories: importDirectories ?? VerseClock.defaultImportDirectories())
         guard !catalog.available.isEmpty else { throw LoadError.missing("Translations/*.json") }
         if let c = FileManager.default.contents(atPath: resources.appendingPathComponent("curated.json").path),
            let h = FileManager.default.contents(atPath: resources.appendingPathComponent("hour_verses.json").path) {
@@ -46,6 +64,12 @@ public final class VerseClock: @unchecked Sendable {
         } else {
             curated = .empty
         }
+    }
+
+    /// Imports into the first import directory.
+    public var importer: TranslationImporter? {
+        guard let destination = catalog.importDirectories.first else { return nil }
+        return TranslationImporter(canon: canon, destination: destination)
     }
 
     /// Resolve the preferred translation, falling back to the first bundled one.

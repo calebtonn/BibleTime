@@ -25,7 +25,7 @@ let resources = URL(fileURLWithPath: resourcesPath)
 
 let clock: VerseClock
 do {
-    clock = try VerseClock(resources: resources)
+    clock = try VerseClock(resources: resources, importDirectories: [])
 } catch {
     print("FAIL could not load resources at \(resources.path): \(error)")
     exit(1)
@@ -264,6 +264,86 @@ p.hourStyle = .twelveHour
 check(!p.uses24Hour(locale: de), "explicit 12h overrides locale")
 let encoded = try! JSONEncoder().encode(defaults)
 check((try? JSONDecoder().decode(Preferences.self, from: encoded)) == defaults, "Codable round-trip")
+
+section("import")
+let importRoot = FileManager.default.temporaryDirectory.appendingPathComponent("BibleTimeTests-\(ProcessInfo.processInfo.processIdentifier)")
+let importDir = importRoot.appendingPathComponent("Translations")
+let dropDir = importRoot.appendingPathComponent("Manual")
+try? FileManager.default.removeItem(at: importRoot)
+try! FileManager.default.createDirectory(at: dropDir, withIntermediateDirectories: true)
+defer { try? FileManager.default.removeItem(at: importRoot) }
+
+func fakeTranslation(id: String, name: String = "Test Version", abbreviation: String = "TEST", mutate: ((inout [String: Any]) -> Void)? = nil) -> Data {
+    var object = try! JSONSerialization.jsonObject(with: Data(contentsOf: resources.appendingPathComponent("Translations/kjv.json"))) as! [String: Any]
+    object["id"] = id
+    object["name"] = name
+    object["abbreviation"] = abbreviation
+    mutate?(&object)
+    return try! JSONSerialization.data(withJSONObject: object)
+}
+
+do {
+    let importing = try VerseClock(resources: resources, importDirectories: [importDir, dropDir])
+    check(importing.catalog.available.map(\.id) == ["kjv", "web", "asv"], "no imports yet")
+    guard let importer = importing.importer else { check(false, "importer available"); exit(1) }
+    check(importer.destination == importDir, "imports go to the first directory")
+
+    let source = importRoot.appendingPathComponent("my-translation.json")
+    try fakeTranslation(id: "Test-1").write(to: source)
+    let info = try importer.importFile(at: source)
+    check(info.id == "test-1" && info.isImported && info.url == importDir.appendingPathComponent("test-1.json"), "imported as test-1.json: \(info)")
+    importing.catalog.rescan()
+    check(importing.catalog.available.map(\.id) == ["kjv", "web", "asv", "test-1"], "catalog lists the import: \(importing.catalog.available.map(\.id))")
+    check(importing.catalog.info(id: "test-1")?.displayName == "Test Version (TEST)", "display name")
+    var p = Preferences(); p.translation = "test-1"; p.hourStyle = .twelveHour
+    let content = try importing.content(for: date(2026, 11, 3, 15, 16), preferences: p, calendar: utc, locale: us)
+    check(content.translation == "TEST" && content.reference == "John 03:16", "imported translation is used: \(content.translation) \(content.reference)")
+    let header = try TranslationHeader(url: info.url)
+    check(header == TranslationHeader(id: "test-1", name: "Test Version", abbreviation: "TEST"), "header read from the file head: \(header)")
+
+    // Manual drop directory and precedence of the first directory for duplicate ids.
+    try fakeTranslation(id: "dropped", name: "Dropped", abbreviation: "DRP").write(to: dropDir.appendingPathComponent("anything.json"))
+    try fakeTranslation(id: "test-1", name: "Shadowed").write(to: dropDir.appendingPathComponent("shadow.json"))
+    importing.catalog.rescan()
+    check(importing.catalog.available.map(\.id) == ["kjv", "web", "asv", "dropped", "test-1"], "manual drop folder is scanned and the first directory wins: \(importing.catalog.available.map(\.id))")
+    check(importing.catalog.info(id: "test-1")?.name == "Test Version", "duplicate id in a later directory is ignored")
+
+    // Re-import replaces in place.
+    try fakeTranslation(id: "test-1", name: "Test Version 2").write(to: source)
+    _ = try importer.importFile(at: source)
+    importing.catalog.rescan()
+    check(importing.catalog.info(id: "test-1")?.name == "Test Version 2", "re-import replaces the file")
+    let reloaded = try importing.catalog.translation(id: "test-1")
+    check(reloaded?.name == "Test Version 2", "cache is invalidated on rescan")
+
+    // Rejections.
+    func rejects(_ data: Data, _ label: String, _ test: (TranslationImporter.ImportError) -> Bool) {
+        do { _ = try importer.validate(data: data); check(false, "\(label) should be rejected") }
+        catch let e as TranslationImporter.ImportError { check(test(e), "\(label): \(e)") }
+        catch { check(false, "\(label): unexpected \(error)") }
+    }
+    rejects(fakeTranslation(id: "kjv"), "bundled id") { if case .bundledID = $0 { return true } else { return false } }
+    rejects(fakeTranslation(id: "bad id!"), "bad id") { if case .invalidFormat = $0 { return true } else { return false } }
+    rejects(Data("{\"hello\": 1}".utf8), "not a translation") { if case .invalidFormat = $0 { return true } else { return false } }
+    rejects(Data("not json".utf8), "not json") { if case .invalidFormat = $0 { return true } else { return false } }
+    rejects(fakeTranslation(id: "tiny") { $0["verses"] = Array(($0["verses"] as! [Any]).prefix(100)) }, "too few verses") { if case .tooFewVerses = $0 { return true } else { return false } }
+    rejects(fakeTranslation(id: "books") { $0["verses"] = ($0["verses"] as! [[Any]]).map { row in var r = row; if (r[0] as! String) == "JHN" { r[0] = "XYZ" }; return r } }, "unknown book code") { if case .unknownBooks(let codes) = $0 { return codes == ["XYZ"] } else { return false } }
+    check(FileManager.default.fileExists(atPath: info.url.path), "rejected imports leave existing files alone")
+
+    // Removal, and the bundled ones are protected.
+    try FileManager.default.removeItem(at: dropDir.appendingPathComponent("shadow.json"))
+    try importer.remove(info)
+    try importer.remove(importing.catalog.info(id: "kjv")!)
+    importing.catalog.rescan()
+    check(importing.catalog.available.map(\.id) == ["kjv", "web", "asv", "dropped"], "removed import disappears, bundled stay: \(importing.catalog.available.map(\.id))")
+    check(!FileManager.default.fileExists(atPath: info.url.path), "file deleted")
+    p.translation = "test-1"
+    let fallback = try importing.content(for: date(2026, 11, 3, 15, 16), preferences: p, calendar: utc, locale: us)
+    check(fallback.translation == "KJV", "a removed translation falls back to KJV")
+    check(!VerseClock.defaultImportDirectories().isEmpty && VerseClock.defaultImportDirectories().allSatisfy { $0.path.hasSuffix("BibleTime/Translations") }, "default import directories: \(VerseClock.defaultImportDirectories().map(\.path))")
+} catch {
+    check(false, "import section threw \(error)")
+}
 
 section("seeded generator")
 var g1 = SeededGenerator(time: ClockTime(hour: 3, minute: 16, dayOrdinal: 7), salt: "kjv")

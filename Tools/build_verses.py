@@ -34,6 +34,12 @@ Typical use (from the repository root):
       --curated /path/to/curated_verses.json --hours /path/to/hour_verses.json \
       --out Resources/Translations/kjv.json
 
+  # A private conversion of a licensed text (never commit the result):
+  python3 -I Tools/build_verses.py build --source my-esv.usfx.xml \
+      --id esv --name "English Standard Version" --abbreviation ESV \
+      --publisher Crossway --license "Copyright 2001 Crossway. Personal use only." \
+      --out ~/Desktop/esv.json
+
   python3 -I Tools/build_verses.py lists \
       --translations Resources/Translations/kjv.json Resources/Translations/web.json \
                      Resources/Translations/asv.json \
@@ -547,11 +553,27 @@ def require_file(path, hint):
         sys.exit("error: missing %s (%s)" % (path, hint))
 
 
-def build_translation(source, copr, tid, name, abbreviation, url, curated, hours, out):
-    require_file(source, "USFX source; download %s" % url)
-    require_file(copr, "copr.htm from the same zip; download %s" % url)
-    whitelist = whitelist_from(curated, hours)
-    meta = parse_copr(copr)
+def default_list(name):
+    """Path of a list shipped next to this script (Tools/lists/<name>)."""
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "lists", name)
+
+
+def build_translation(source, copr, tid, name, abbreviation, url, curated, hours, out,
+                      publisher="eBible.org", license_text="Public Domain"):
+    """Build one translation file.
+
+    `copr` may be None for a translation that did not come from eBible.org (a private
+    conversion of a licensed text); the provenance block then records only what the
+    caller passed in.  `curated`/`hours` default to the lists shipped in Tools/lists.
+    """
+    require_file(source, "USFX source" + ("; download %s" % url if url else ""))
+    if copr is not None:
+        require_file(copr, "copr.htm from the same zip" + ("; download %s" % url if url else ""))
+    if not re.match(r"^[a-z0-9][a-z0-9_-]*$", tid):
+        sys.exit("error: --id must be lowercase letters, digits, - or _ (got %r)" % tid)
+    whitelist = whitelist_from(curated or default_list("curated_verses.json"),
+                               hours or default_list("hour_verses.json"))
+    meta = parse_copr(copr) if copr else {"edition": name, "sourceFilesDated": "", "generated": ""}
     log("[%s] parsing %s" % (tid, source))
     verses, chapters, bridged = parse_usfx(source)
     for b in bridged:
@@ -582,13 +604,13 @@ def build_translation(source, copr, tid, name, abbreviation, url, curated, hours
         "abbreviation": abbreviation,
         "language": "en",
         "source": {
-            "publisher": "eBible.org",
+            "publisher": publisher,
             "edition": meta["edition"],
-            "url": url,
+            "url": url or "",
             "sourceFilesDated": meta["sourceFilesDated"],
             "generated": meta["generated"],
             "sha256": sha256_of(source),
-            "license": "Public Domain",
+            "license": license_text,
         },
         "verses": rows,
     }
@@ -830,13 +852,16 @@ def main(argv=None):
 
     p = sub.add_parser("build", help="build one translation JSON from a USFX file")
     p.add_argument("--source", required=True, help="USFX xml file")
-    p.add_argument("--copr", required=True, help="copr.htm from the same eBible zip")
-    p.add_argument("--id", required=True, help="translation id, e.g. kjv")
+    p.add_argument("--copr", help="copr.htm from the same eBible zip (omit for a private conversion)")
+    p.add_argument("--id", required=True, help="translation id, e.g. kjv (lowercase, no spaces)")
     p.add_argument("--name", required=True)
     p.add_argument("--abbreviation", required=True)
-    p.add_argument("--url", required=True, help="download URL of the zip the source came from")
-    p.add_argument("--curated", required=True, help="curated_verses.json (human-readable refs)")
-    p.add_argument("--hours", required=True, help="hour_verses.json (human-readable refs)")
+    p.add_argument("--url", default="", help="download URL of the zip the source came from")
+    p.add_argument("--publisher", default="eBible.org")
+    p.add_argument("--license", default="Public Domain",
+                   help='license or copyright notice to record, e.g. "Copyright 2001 Crossway; personal use"')
+    p.add_argument("--curated", help="curated_verses.json (default: Tools/lists/curated_verses.json)")
+    p.add_argument("--hours", help="hour_verses.json (default: Tools/lists/hour_verses.json)")
     p.add_argument("--out", required=True)
 
     p = sub.add_parser("lists", help="build curated.json, hour_verses.json, books.json")
@@ -864,7 +889,8 @@ def main(argv=None):
         curated = load_curated(args.curated)
         hours = load_hours(args.hours)
         build_translation(args.source, args.copr, args.id, args.name, args.abbreviation,
-                          args.url, curated, hours, args.out)
+                          args.url, args.curated, args.hours, args.out,
+                          publisher=args.publisher, license_text=args.license)
         return 0
 
     if args.cmd == "lists":

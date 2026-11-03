@@ -74,7 +74,7 @@ render: $(BUNDLE) $(HOST)
 	BIBLETIME_TIME=08:09 BIBLETIME_REF="EST 8:9" BIBLETIME_PREFS='{"layout":"clock","theme":"paper"}' $(HOST) $(BUNDLE) --out $(RENDER_DIR)/longest-verse.png --width 1920 --height 1080
 	BIBLETIME_TIME=08:38 BIBLETIME_REF="ROM 8:38" BIBLETIME_PREFS='{"layout":"book","theme":"paper","typeface":"charter"}' $(HOST) $(BUNDLE) --out $(RENDER_DIR)/extended-fragment.png
 	BIBLETIME_TIME=20:12 BIBLETIME_REF="EST 8:9" BIBLETIME_PREFS='{"layout":"centered","theme":"night","textScale":2.0}' $(HOST) $(BUNDLE) --out $(RENDER_DIR)/portrait-large.png --width 1080 --height 1920
-	BIBLETIME_TIME=15:16 BIBLETIME_PREFS='{"layout":"clock","theme":"paper"}'    $(HOST) $(BUNDLE) --out $(RENDER_DIR)/preview.png --width 296 --height 184 --preview
+	BIBLETIME_TIME=15:16 BIBLETIME_PREFS='{"layout":"clock","theme":"paper"}'    $(HOST) $(BUNDLE) --out $(RENDER_DIR)/preview.png --width 296 --height 184 --preview --sheet $(RENDER_DIR)/options.png
 	@echo "renders in $(RENDER_DIR)/"
 
 test: $(TESTS)

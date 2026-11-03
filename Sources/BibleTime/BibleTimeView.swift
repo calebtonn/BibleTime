@@ -75,7 +75,21 @@ final class BibleTimeView: ScreenSaverView {
     override var hasConfigureSheet: Bool { true }
 
     override var configureSheet: NSWindow? {
-        let sheet = ConfigureSheet(preferences: store.load(), translations: clock?.catalog.available ?? []) { [weak self] result in
+        let clock = self.clock
+        let actions = ConfigureSheet.TranslationActions(
+            list: { clock?.catalog.available ?? [] },
+            importFile: { url in
+                guard let clock, let importer = clock.importer else { throw VerseClock.LoadError.missing("import directory") }
+                let info = try importer.importFile(at: url)
+                clock.catalog.rescan()
+                return info
+            },
+            remove: { info in
+                guard let clock, let importer = clock.importer else { return }
+                try importer.remove(info)
+                clock.catalog.rescan()
+            })
+        let sheet = ConfigureSheet(preferences: store.load(), actions: actions) { [weak self] result in
             guard let self else { return }
             if let result {
                 self.store.save(result)   // posts preferencesDidChange, which refreshes every instance including this one

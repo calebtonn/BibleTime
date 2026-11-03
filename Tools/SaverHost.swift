@@ -5,7 +5,8 @@ import ScreenSaver
 // It is the development loop for this project: System Settings caches screen saver bundles aggressively,
 // so iterating there is slow, and legacyScreenSaver gives no feedback when a bundle fails to load.
 //
-// Usage: SaverHost <path/to/BibleTime.saver> --out render.png [--width 1440] [--height 900] [--seconds 1.5] [--preview]
+// Usage: SaverHost <path/to/BibleTime.saver> --out render.png [--width 1440] [--height 900] [--seconds 1.5] [--preview] [--sheet options.png]
+//        --sheet also renders the saver's Options sheet (configureSheet) to the given file.
 // Environment: BIBLETIME_TIME="15:16", BIBLETIME_REF="EST 8:9" and BIBLETIME_PREFS='{"layout":"book"}' are honoured by the saver.
 
 struct Options {
@@ -15,6 +16,7 @@ struct Options {
     var height: Double = 900
     var seconds: Double = 1.5
     var preview = false
+    var sheet: String?
 }
 
 func parse() -> Options {
@@ -31,6 +33,7 @@ func parse() -> Options {
     if let v = take("--height"), let d = Double(v) { o.height = d }
     if let v = take("--seconds"), let d = Double(v) { o.seconds = d }
     if let i = args.firstIndex(of: "--preview") { o.preview = true; args.remove(at: i) }
+    if let v = take("--sheet") { o.sheet = v }
     guard let path = args.first else {
         fputs("usage: SaverHost <bundle.saver> [--out file.png] [--width W] [--height H] [--seconds S] [--preview]\n", stderr)
         exit(2)
@@ -71,6 +74,21 @@ do {
     exit(1)
 }
 print("wrote \(options.out) (\(rep.pixelsWide)x\(rep.pixelsHigh))")
+
+if let sheetPath = options.sheet {
+    guard view.hasConfigureSheet, let sheet = view.configureSheet, let content = sheet.contentView else {
+        fputs("error: the saver has no configure sheet\n", stderr); exit(1)
+    }
+    sheet.orderFrontRegardless()
+    content.layoutSubtreeIfNeeded()
+    RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.3))
+    guard let sheetRep = content.bitmapImageRepForCachingDisplay(in: content.bounds) else { fputs("error: no sheet bitmap\n", stderr); exit(1) }
+    content.cacheDisplay(in: content.bounds, to: sheetRep)
+    guard let sheetPNG = sheetRep.representation(using: .png, properties: [:]) else { fputs("error: sheet png failed\n", stderr); exit(1) }
+    try! sheetPNG.write(to: URL(fileURLWithPath: sheetPath))
+    print("wrote \(sheetPath) (\(sheetRep.pixelsWide)x\(sheetRep.pixelsHigh))")
+    sheet.close()
+}
 view.stopAnimation()
 window.close()
 exit(0)

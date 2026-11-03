@@ -78,6 +78,16 @@ Regenerate with `make data` (downloads the sources) and check the result with `m
 not hand-edit the generated files. Changes to the curated lists go in `Tools/build_verses.py` or the
 `curated.json` / `hour_verses.json` inputs, and the tests in `Tests/CoreTests` must keep passing.
 
+## Imported translations
+
+`TranslationImporter` (core) validates a file and copies it to the first of `VerseClock.defaultImportDirectories()`.
+Inside the screen saver sandbox that is the legacyScreenSaver container
+(`~/Library/Containers/com.apple.ScreenSaver.Engine.legacyScreenSaver/Data/Library/Application Support/BibleTime/Translations/`);
+the saver also scans `~/Library/Application Support/BibleTime/Translations/` in the real home directory, which the
+sandbox can read, so a file can be placed there by hand. The Options sheet runs inside that same sandboxed
+process, which is why the open panel works and why the copy must go into the container. `make render` also
+renders the Options sheet to `build/renders/options.png` through the host's `--sheet` flag.
+
 ## Style
 
 - Swift 5 language mode, warnings are errors.
