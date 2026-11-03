@@ -72,6 +72,20 @@ final class BibleTimeView: ScreenSaverView {
     /// System Settings on macOS 26 creates a zero-sized preview instance; treat small views as previews whatever `isPreview` says.
     private var effectivelyPreview: Bool { isPreview || bounds.height < 300 || bounds.width < 400 }
 
+    /// Which display this view is on: 0 for the main display (the one with the menu bar), counting up in the
+    /// order macOS lists screens. Unknown (no window yet, or the preview) counts as the main display.
+    private var displayIndex: Int {
+        if let pinned = DevOverrides.pinnedDisplayIndex { return pinned }
+        guard !effectivelyPreview, let screen = window?.screen else { return 0 }
+        let screens = NSScreen.screens
+        return screens.firstIndex(where: { $0 == screen }) ?? 0
+    }
+
+    /// True when this view should draw only the background (Main-display-only mode on a secondary screen).
+    private var showsOnlyBackground: Bool {
+        preferences.displayMode == .mainOnly && displayIndex > 0 && !effectivelyPreview
+    }
+
     override var hasConfigureSheet: Bool { true }
 
     override var configureSheet: NSWindow? {
@@ -142,6 +156,11 @@ final class BibleTimeView: ScreenSaverView {
         }
     }
 
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window != nil, bounds.width > 0, bounds.height > 0 { refresh(now: DevOverrides.now(), animated: false) }
+    }
+
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         refresh(now: DevOverrides.now(), animated: false)
@@ -159,13 +178,16 @@ final class BibleTimeView: ScreenSaverView {
         let time = ClockTime(date: now)
         palette = Palette.resolve(preferences.theme, appearance: effectiveAppearance, hour: time.hour)
 
+        let variant = preferences.displayMode == .differentVerses ? displayIndex : 0
         let content: DisplayContent
-        if let clock {
+        if showsOnlyBackground {
+            content = DisplayContent(minuteKey: time.minuteKey, text: "", reference: "", clock: "", kind: .fallback, translation: "")
+        } else if let clock {
             do {
                 if let ref = DevOverrides.pinnedReference, let pinned = try clock.content(for: ref, date: now, preferences: preferences) {
                     content = pinned
                 } else {
-                    content = try clock.content(for: now, preferences: preferences)
+                    content = try clock.content(for: now, preferences: preferences, variant: variant)
                 }
             } catch {
                 content = DisplayContent(minuteKey: time.minuteKey, text: "\(error)", reference: "", clock: "", kind: .fallback, translation: "")
@@ -193,9 +215,10 @@ final class BibleTimeView: ScreenSaverView {
     // MARK: Drawing
 
     override func draw(_ rect: NSRect) {
-        palette.background.setFill()
+        // A secondary display in Main-display-only mode stays dark, whatever the theme.
+        (showsOnlyBackground ? NSColor.black : palette.background).setFill()
         bounds.fill()
-        guard let current else { return }
+        guard let current, !current.content.text.isEmpty else { return }
         let scale = window?.backingScaleFactor ?? 2
 
         guard let start = fadeStart, let previous else {

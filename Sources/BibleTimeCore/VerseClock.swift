@@ -79,7 +79,7 @@ public final class VerseClock: @unchecked Sendable {
     }
 
     /// Content for `date`. Throws only when the translation file cannot be read.
-    public func content(for date: Date, preferences: Preferences, calendar: Calendar = .current, locale: Locale = .current) throws -> DisplayContent {
+    public func content(for date: Date, preferences: Preferences, calendar: Calendar = .current, locale: Locale = .current, variant: Int = 0) throws -> DisplayContent {
         let translation = try translation(for: preferences)
         let time = ClockTime(date: date, calendar: calendar)
         let use24 = preferences.uses24Hour(locale: locale)
@@ -87,7 +87,7 @@ public final class VerseClock: @unchecked Sendable {
         let formatter = ReferenceFormatter(canon: canon, pad: preferences.padReference)
         let clock = VerseClock.clockString(for: date, use24Hour: use24, calendar: calendar, locale: locale)
 
-        guard let selection = selector.select(time: time, preferences: preferences, use24Hour: use24) else {
+        guard let selection = selector.select(time: time, preferences: preferences, use24Hour: use24, variant: variant) else {
             return DisplayContent(minuteKey: time.minuteKey, text: "", reference: "", clock: clock, kind: .fallback, translation: translation.abbreviation)
         }
         return DisplayContent(

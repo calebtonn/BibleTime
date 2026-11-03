@@ -19,6 +19,12 @@ enum DevOverrides {
 
     static func now() -> Date { pinnedDate ?? Date() }
 
+    /// - `BIBLETIME_DISPLAY=1` pretends the view sits on the second display (0 is the main display).
+    static let pinnedDisplayIndex: Int? = {
+        guard let value = ProcessInfo.processInfo.environment["BIBLETIME_DISPLAY"], let index = Int(value), index >= 0 else { return nil }
+        return index
+    }()
+
     /// - `BIBLETIME_REF="EST 8:9"` (USFM book code) forces a verse regardless of the time, for screenshots.
     static let pinnedReference: VerseRef? = {
         guard let value = ProcessInfo.processInfo.environment["BIBLETIME_REF"] else { return nil }

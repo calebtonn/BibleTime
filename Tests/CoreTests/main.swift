@@ -198,6 +198,36 @@ for day in 0..<60 {
     }
 }
 
+section("display variants")
+do {
+    let slot = ClockTime(hour: 3, minute: 16, dayOrdinal: 99)
+    let v0 = selector.select(time: slot, preferences: prefs, use24Hour: false)!
+    let v1 = selector.select(time: slot, preferences: prefs, use24Hour: false, variant: 1)!
+    let v2 = selector.select(time: slot, preferences: prefs, use24Hour: false, variant: 2)!
+    check(v0.primary.ref == VerseRef(book: "JHN", chapter: 3, verse: 16), "variant 0 is the main display's verse")
+    check(v1.primary.ref != v0.primary.ref && v2.primary.ref != v0.primary.ref && v1.primary.ref != v2.primary.ref, "three displays show three different 3:16 verses: \(v0.primary.ref) \(v1.primary.ref) \(v2.primary.ref)")
+    check([v0, v1, v2].allSatisfy { $0.primary.ref.chapter == 3 && $0.primary.ref.verse == 16 && $0.kind == .match }, "all variants still match 3:16")
+    check(selector.select(time: slot, preferences: prefs, use24Hour: false, variant: 1) == v1, "variants are deterministic")
+    check(selector.select(time: slot, preferences: prefs, use24Hour: false, variant: -3)?.primary.ref == v0.primary.ref, "negative variant is the main display")
+    // Random mode: a secondary display avoids the main display's verse too.
+    var collisions = 0, total = 0
+    for h in 1...12 { for m in 1...59 {
+        let t = ClockTime(hour: h, minute: m, dayOrdinal: 7)
+        guard let a = selector.select(time: t, preferences: random, use24Hour: false), a.kind == .match,
+              let b = selector.select(time: t, preferences: random, use24Hour: false, variant: 1) else { continue }
+        total += 1
+        let pool = kjv.verses(chapter: h, verse: m).filter { !$0.flags.contains(.exclude) }
+        if a.primary.ref == b.primary.ref { collisions += 1; check(pool.count == 1, "\(h):\(m) displays coincide only when a single verse exists (pool \(pool.count))") }
+    } }
+    check(total > 600 && collisions < total / 10, "secondary display differs on most minutes (\(collisions) coincidences of \(total))")
+    // Top of the hour: the time verse shifts too.
+    let top0 = selector.select(time: ClockTime(hour: 9, minute: 0, dayOrdinal: 100), preferences: prefs, use24Hour: false)!
+    let top1 = selector.select(time: ClockTime(hour: 9, minute: 0, dayOrdinal: 100), preferences: prefs, use24Hour: false, variant: 1)!
+    check(top0.kind == .topOfHour && top1.kind == .topOfHour && top0.primary.ref != top1.primary.ref, "top-of-hour verses differ per display")
+    let c1 = try clock.content(for: date(2026, 11, 3, 15, 16), preferences: prefs, calendar: utc, locale: us, variant: 1)
+    check(c1.reference != "John 03:16" && c1.reference.hasSuffix("03:16"), "facade passes the variant through: \(c1.reference)")
+} catch { check(false, "display variants threw \(error)") }
+
 section("coverage")
 for t in translations {
     let sel = VerseSelector(translation: t, curated: clock.curated)
@@ -256,6 +286,9 @@ check(Preferences(dictionary: ["textScale": 9.0]).textScale == Preferences.textS
 check(Preferences(dictionary: ["textScale": 0.1]).textScale == Preferences.textScaleRange.lowerBound, "textScale clamped low")
 check(Preferences(dictionary: ["layout": "bogus", "theme": "night"]).layout == .clock, "bad enum keeps default")
 check(Preferences(dictionary: ["layout": "bogus", "theme": "night"]).theme == .night, "good enum applies")
+check(Preferences().displayMode == .sameVerse, "default display mode shows the same verse everywhere")
+check(Preferences(dictionary: ["displayMode": "differentVerses"]).displayMode == .differentVerses, "display mode decodes")
+check(Preferences(dictionary: ["displayMode": "nope"]).displayMode == .sameVerse, "bad display mode keeps default")
 check(!Preferences.localeUses24Hour(us), "en_US is 12-hour")
 check(Preferences.localeUses24Hour(de), "de_DE is 24-hour")
 var p = Preferences(); p.hourStyle = .twentyFourHour

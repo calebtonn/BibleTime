@@ -61,6 +61,24 @@ public enum TypefaceChoice: String, Codable, CaseIterable, Sendable {
     }
 }
 
+/// What to show when more than one display is attached.
+public enum DisplayMode: String, Codable, CaseIterable, Sendable {
+    /// Verses on the main display; other displays show only the background.
+    case mainOnly
+    /// Every display shows the same verse (the default).
+    case sameVerse
+    /// Every display shows a different verse for the minute, when the Bible has more than one.
+    case differentVerses
+
+    public var title: String {
+        switch self {
+        case .mainOnly: return "Main display only"
+        case .sameVerse: return "All displays, same verse"
+        case .differentVerses: return "All displays, different verses"
+        }
+    }
+}
+
 /// All user-adjustable settings. Stored by the screen saver in `ScreenSaverDefaults`; tests and the preview host
 /// can construct them directly.
 public struct Preferences: Codable, Equatable, Sendable {
@@ -78,6 +96,7 @@ public struct Preferences: Codable, Equatable, Sendable {
     public var extendFragments: Bool = true
     /// Zero-pad chapter and verse in the reference ("John 03:16") so it reads like the time.
     public var padReference: Bool = true
+    public var displayMode: DisplayMode = .sameVerse
 
     public static let textScaleRange: ClosedRange<Double> = 0.75...2.0
 
@@ -93,7 +112,7 @@ public struct Preferences: Codable, Equatable, Sendable {
     // MARK: Key-value representation (used for ScreenSaverDefaults and the dev override environment variable)
 
     public enum Key: String, CaseIterable {
-        case translation, hourStyle, theme, layout, typeface, textScale, showClock, preferFamous, extendFragments, padReference
+        case translation, hourStyle, theme, layout, typeface, textScale, showClock, preferFamous, extendFragments, padReference, displayMode
     }
 
     public var dictionary: [String: Any] {
@@ -108,6 +127,7 @@ public struct Preferences: Codable, Equatable, Sendable {
             Key.preferFamous.rawValue: preferFamous,
             Key.extendFragments.rawValue: extendFragments,
             Key.padReference.rawValue: padReference,
+            Key.displayMode.rawValue: displayMode.rawValue,
         ]
     }
 
@@ -124,6 +144,7 @@ public struct Preferences: Codable, Equatable, Sendable {
         if let v = d[Key.preferFamous.rawValue] as? Bool { preferFamous = v }
         if let v = d[Key.extendFragments.rawValue] as? Bool { extendFragments = v }
         if let v = d[Key.padReference.rawValue] as? Bool { padReference = v }
+        if let v = d[Key.displayMode.rawValue] as? String, let e = DisplayMode(rawValue: v) { displayMode = e }
         self = normalized
     }
 

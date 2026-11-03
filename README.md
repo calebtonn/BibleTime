@@ -25,6 +25,8 @@ Bible Clock.
 - **12- or 24-hour.** Follows your system clock setting; in 24-hour mode 15:16 prefers a chapter 15 verse.
 - **Three layouts** (Clock, Centered, Book), **two themes** (Paper, Night, or automatic by appearance and time
   of day), five typefaces, an adjustable text size, an optional small clock.
+- **Multiple displays.** Show verses on every display (the same one, or a different one per screen) or on the
+  main display only, with the others kept dark.
 - **Easy on the screen.** One crossfade per minute, a few points of drift every five minutes, and nothing else
   moving. Text is laid out in points and scales to any display, Retina or not, portrait or ultrawide.
 - Builds with the Swift compiler from Xcode Command Line Tools alone. No Xcode needed.
@@ -72,6 +74,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the development loop.
 | Layout | Clock, Centered, Book | Clock |
 | Typeface | New York, Charter, Palatino, Georgia, San Francisco | New York |
 | Text size | 75%–200% | 100% (4% of the screen height) |
+| Displays | Main display only; All displays, same verse; All displays, different verses | All displays, same verse |
 | Show the time | on/off | on |
 | Prefer well-known verses | on/off | on |
 | Complete the sentence | on/off | on |

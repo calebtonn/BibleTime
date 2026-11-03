@@ -25,6 +25,7 @@ final class ConfigureSheet: NSObject {
     private let themePopup = NSPopUpButton()
     private let layoutPopup = NSPopUpButton()
     private let typefacePopup = NSPopUpButton()
+    private let displayPopup = NSPopUpButton()
     private let sizeSlider = NSSlider()
     private let sizeLabel = NSTextField(labelWithString: "")
     private let clockCheck = NSButton(checkboxWithTitle: "Show the time", target: nil, action: nil)
@@ -62,6 +63,7 @@ final class ConfigureSheet: NSObject {
         popup(themePopup, titles: Theme.allCases.map(\.title))
         popup(layoutPopup, titles: LayoutStyle.allCases.map(\.title))
         popup(typefacePopup, titles: TypefaceChoice.allCases.map(\.title))
+        popup(displayPopup, titles: DisplayMode.allCases.map(\.title))
 
         importButton.target = self
         importButton.action = #selector(importTranslation)
@@ -100,6 +102,7 @@ final class ConfigureSheet: NSObject {
             [label("Layout:"), layoutPopup],
             [label("Typeface:"), typefacePopup],
             [label("Text size:"), sizeRow],
+            [label("Displays:"), displayPopup],
             [NSGridCell.emptyContentView, clockCheck],
             [NSGridCell.emptyContentView, famousCheck],
             [NSGridCell.emptyContentView, extendCheck],
@@ -196,6 +199,7 @@ final class ConfigureSheet: NSObject {
         themePopup.selectItem(at: Theme.allCases.firstIndex(of: p.theme) ?? 0)
         layoutPopup.selectItem(at: LayoutStyle.allCases.firstIndex(of: p.layout) ?? 0)
         typefacePopup.selectItem(at: TypefaceChoice.allCases.firstIndex(of: p.typeface) ?? 0)
+        displayPopup.selectItem(at: DisplayMode.allCases.firstIndex(of: p.displayMode) ?? 1)
         sizeSlider.doubleValue = p.textScale
         clockCheck.state = p.showClock ? .on : .off
         famousCheck.state = p.preferFamous ? .on : .off
@@ -211,6 +215,7 @@ final class ConfigureSheet: NSObject {
         p.theme = Theme.allCases[max(0, themePopup.indexOfSelectedItem)]
         p.layout = LayoutStyle.allCases[max(0, layoutPopup.indexOfSelectedItem)]
         p.typeface = TypefaceChoice.allCases[max(0, typefacePopup.indexOfSelectedItem)]
+        p.displayMode = DisplayMode.allCases[max(0, displayPopup.indexOfSelectedItem)]
         p.textScale = sizeSlider.doubleValue
         p.showClock = clockCheck.state == .on
         p.preferFamous = famousCheck.state == .on

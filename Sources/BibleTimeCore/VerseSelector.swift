@@ -128,23 +128,38 @@ public struct VerseSelector: Sendable {
     }
 
     /// Returns nil only when the translation has no usable verse at all (never for the bundled data).
-    public func select(time: ClockTime, preferences: Preferences, use24Hour: Bool? = nil) -> Selection? {
-        var rng = SeededGenerator(time: time, salt: translation.id)
+    ///
+    /// `variant` numbers the display when each screen should show a different verse: variant 0 is the main
+    /// display's choice, variant 1 the next screen's, and so on. Higher variants avoid the verses the lower ones
+    /// picked whenever the minute offers enough candidates, and fall back to the same verse when it does not.
+    public func select(time: ClockTime, preferences: Preferences, use24Hour: Bool? = nil, variant: Int = 0) -> Selection? {
+        let variant = max(0, variant)
+        var taken: Set<VerseRef> = []
+        for v in 0..<variant {
+            if let earlier = selectOne(time: time, preferences: preferences, use24Hour: use24Hour, variant: v, avoiding: taken) {
+                taken.insert(earlier.primary.ref)
+            }
+        }
+        return selectOne(time: time, preferences: preferences, use24Hour: use24Hour, variant: variant, avoiding: taken)
+    }
+
+    private func selectOne(time: ClockTime, preferences: Preferences, use24Hour: Bool?, variant: Int, avoiding taken: Set<VerseRef>) -> Selection? {
+        var rng = SeededGenerator(time: time, salt: variant == 0 ? translation.id : "\(translation.id)#\(variant)")
         let twentyFour = use24Hour ?? preferences.uses24Hour()
 
         if time.minute == 0 {
-            if let verse = hourVerse(time: time, rng: &rng) {
+            if let verse = hourVerse(time: time, offset: variant, rng: &rng) {
                 return Selection(verses: extended(verse, enabled: preferences.extendFragments), kind: .topOfHour)
             }
         }
 
         for chapter in VerseSelector.chapters(for: time, use24Hour: twentyFour) {
-            if let verse = pick(chapter: chapter, minute: time.minute, time: time, preferences: preferences, rng: &rng) {
+            if let verse = pick(chapter: chapter, minute: time.minute, time: time, preferences: preferences, variant: variant, avoiding: taken, rng: &rng) {
                 return Selection(verses: extended(verse, enabled: preferences.extendFragments), kind: .match)
             }
         }
 
-        if let verse = hourVerse(time: time, rng: &rng) {
+        if let verse = hourVerse(time: time, offset: variant, rng: &rng) {
             return Selection(verses: extended(verse, enabled: preferences.extendFragments), kind: .fallback)
         }
         return nil
@@ -152,14 +167,19 @@ public struct VerseSelector: Sendable {
 
     // MARK: - Internals
 
-    private func pick(chapter: Int, minute: Int, time: ClockTime, preferences: Preferences, rng: inout SeededGenerator) -> Verse? {
+    private func pick(chapter: Int, minute: Int, time: ClockTime, preferences: Preferences, variant: Int,
+                      avoiding taken: Set<VerseRef>, rng: inout SeededGenerator) -> Verse? {
         let candidates = translation.verses(chapter: chapter, verse: minute)
         guard !candidates.isEmpty else { return nil }
 
         if preferences.preferFamous, chapter == time.hour12 {
             let famous = (curated.bySlot[time.hour12 * 60 + minute] ?? []).compactMap { translation[$0] }
             if !famous.isEmpty {
-                return famous[VerseSelector.famousIndex(count: famous.count, dayOrdinal: time.dayOrdinal)]
+                let index = (VerseSelector.famousIndex(count: famous.count, dayOrdinal: time.dayOrdinal) + variant) % famous.count
+                if !taken.contains(famous[index].ref) || famous.allSatisfy({ taken.contains($0.ref) }) {
+                    return famous[index]
+                }
+                // The shifted famous verse is already on another display; fall through to the general pool.
             }
         }
 
@@ -170,10 +190,13 @@ public struct VerseSelector: Sendable {
             return chain.count > 1 && !(chain.last?.endsMidSentence ?? true)
         }
         let clean = candidates.filter { $0.flags.isEmpty || extendable($0) }
-        if let verse = clean.randomElement(using: &rng) { return verse }
         // Genealogies and name lists (.exclude) are never shown; the caller folds to another chapter or a time verse.
         let weak = candidates.filter { !$0.flags.contains(.exclude) }
-        return weak.randomElement(using: &rng)
+        // Verses no other display is showing come first, clean before weak; only then repeat one.
+        for tier in [clean.filter { !taken.contains($0.ref) }, weak.filter { !taken.contains($0.ref) }, clean, weak] {
+            if let verse = tier.randomElement(using: &rng) { return verse }
+        }
+        return nil
     }
 
     /// Which curated verse to show on a given day. The first (most famous) verse is shown two days out of three,
@@ -185,12 +208,13 @@ public struct VerseSelector: Sendable {
         return 1 + (day / 3) % (count - 1)
     }
 
-    private func hourVerse(time: ClockTime, rng: inout SeededGenerator) -> Verse? {
+    private func hourVerse(time: ClockTime, offset: Int, rng: inout SeededGenerator) -> Verse? {
         let pool = curated.hourVerses.compactMap { translation[$0] }
         guard !pool.isEmpty else { return nil }
         if time.minute == 0 {
-            // Walk the list hour by hour so a day cycles through most of it, offset by the day for variety.
-            let index = ((time.dayOrdinal * 7 + time.hour) % pool.count + pool.count) % pool.count
+            // Walk the list hour by hour so a day cycles through most of it, offset by the day for variety
+            // (and by the display number, so screens showing different verses differ here too).
+            let index = ((time.dayOrdinal * 7 + time.hour + offset) % pool.count + pool.count) % pool.count
             return pool[index]
         }
         return pool.randomElement(using: &rng)

@@ -39,6 +39,7 @@ environment variables make renders reproducible:
 | `BIBLETIME_TIME` | `15:16` | Pin the clock to today at that time. |
 | `BIBLETIME_PREFS` | `{"layout":"book","theme":"night"}` | Override stored settings (keys as in `Preferences.swift`). |
 | `BIBLETIME_REF` | `EST 8:9` | Force a verse by USFM book code, whatever the time. |
+| `BIBLETIME_DISPLAY` | `1` | Pretend the view is on the second display (0 is the main display). |
 
 `Tools/build_from_biblia.py` builds a translation file from the Biblia API for personal import; it reuses the flag
 heuristics from `build_verses.py` and has no tests that hit the network (its parser is exercised by hand with `--only`).
