@@ -202,6 +202,9 @@ constexpr wchar_t kSaverClass[] = L"BibleTimeSaverWindow";
 constexpr wchar_t kControllerClass[] = L"BibleTimeSaverController";
 constexpr UINT_PTR kTickTimer = 1;
 constexpr UINT_PTR kRebuildTimer = 2;
+constexpr UINT_PTR kDeactivateTimer = 3;
+/// Deactivation is confirmed after this delay, because a display change can deactivate us before WM_DISPLAYCHANGE.
+constexpr UINT kDeactivateDelayMs = 250;
 constexpr UINT kMsgRebuild = WM_APP + 1;
 /// Mouse travel (device pixels) that counts as the user coming back.
 constexpr int kMouseThreshold = 4;
@@ -285,6 +288,10 @@ public:
     /// Deactivation during the first half second (after start or a display change) is ignored: window creation and
     /// moves can briefly shuffle activation.
     bool pastStartupGrace() const { return monotonicSeconds() - startedAt_ > kGraceSeconds; }
+    /// Another application became active: end the saver, unless a display change explains it (checked shortly after).
+    void deactivated() {
+        if (pastStartupGrace()) SetTimer(controller_, kDeactivateTimer, kDeactivateDelayMs, nullptr);
+    }
     /// A display change is under way: restart the grace period and forget the cursor baseline.
     void beginGrace() {
         startedAt_ = monotonicSeconds();
@@ -441,7 +448,12 @@ LRESULT SaverWindow::handle(UINT msg, WPARAM wParam, LPARAM lParam) {
         InvalidateRect(hwnd_, nullptr, FALSE);
         return 0;
     case WM_DISPLAYCHANGE:
-        if (fullScreen_) app_.scheduleRebuild();
+        if (fullScreen_) {
+            // Start the grace period now: the deactivation and cursor moves that follow the change may be handled
+            // before the posted rebuild message.
+            app_.beginGrace();
+            app_.scheduleRebuild();
+        }
         return 0;
     case WM_SETTINGCHANGE:
     case WM_THEMECHANGED:
@@ -475,7 +487,7 @@ LRESULT SaverWindow::handle(UINT msg, WPARAM wParam, LPARAM lParam) {
             app_.quit();
             return 0;
         case WM_ACTIVATEAPP:
-            if (!wParam && app_.pastStartupGrace()) app_.quit();
+            if (!wParam) app_.deactivated();
             return 0;
         case WM_SYSCOMMAND:
             switch (wParam & 0xFFF0) {
@@ -690,6 +702,10 @@ LRESULT CALLBACK SaverApp::controllerProc(HWND hwnd, UINT msg, WPARAM wParam, LP
     case WM_TIMER:
         if (wParam == kTickTimer) {
             self->tick();
+        } else if (wParam == kDeactivateTimer) {
+            KillTimer(hwnd, kDeactivateTimer);
+            // Still inactive and no display change began meanwhile (that path re-checks the foreground itself).
+            if (self->pastStartupGrace() && !self->ownsForeground()) self->quit();
         } else if (wParam == kRebuildTimer) {
             KillTimer(hwnd, kRebuildTimer);
             self->syncWindows(false);
@@ -697,9 +713,7 @@ LRESULT CALLBACK SaverApp::controllerProc(HWND hwnd, UINT msg, WPARAM wParam, LP
         }
         return 0;
     case kMsgRebuild:
-        // Display changes arrive in bursts; reconcile once things settle. Until then the cursor may jump and activation
-        // shuffle as the desktop is rearranged: neither must end the saver.
-        self->beginGrace();
+        // Display changes arrive in bursts; reconcile once things settle.
         SetTimer(hwnd, kRebuildTimer, 300, nullptr);
         return 0;
     default: return DefWindowProcW(hwnd, msg, wParam, lParam);
