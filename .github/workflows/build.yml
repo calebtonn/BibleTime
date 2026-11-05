@@ -21,6 +21,10 @@ jobs:
   macos:
     name: macOS
     runs-on: macos-15
+    env:
+      # Developer ID signing and notarization run for release tags and manual runs once the secrets exist
+      # (see CONTRIBUTING.md, "Signing releases"); otherwise the bundle is signed ad hoc as before.
+      SIGN_MAC: ${{ secrets.MACOS_CERT_P12 != '' && secrets.APPLE_API_KEY != '' && (startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch') }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -36,6 +40,28 @@ jobs:
 
       - name: Cross-check the Windows C++ core against the Swift core
         run: make crosscheck
+
+      - name: Import Developer ID certificate
+        if: env.SIGN_MAC == 'true'
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD=$(uuidgen)
+          echo "$MACOS_CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
+          rm -f "$RUNNER_TEMP/cert.p12"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" > /dev/null
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN" | sed -n 's/.*"\(Developer ID Application: .*\)"/\1/p' | head -n1)
+          test -n "$IDENTITY" || { echo "::error::no Developer ID Application identity in MACOS_CERT_P12"; exit 1; }
+          echo "Signing as: $IDENTITY"
+          echo "SIGN_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
 
       - name: Build screen saver
         run: make
@@ -82,6 +108,37 @@ jobs:
           unzip -q build/BibleTime-macOS.zip -d build/unzipped
           codesign --verify --deep --strict build/unzipped/BibleTime.saver
 
+      # Apple scans the signed bundle; the ticket is then stapled to it so Gatekeeper accepts it offline, and the
+      # zip is rebuilt around the stapled bundle.
+      - name: Notarize
+        if: env.SIGN_MAC == 'true'
+        timeout-minutes: 30
+        env:
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          set -euo pipefail
+          KEY="$RUNNER_TEMP/AuthKey.p8"
+          printf '%s' "$APPLE_API_KEY" > "$KEY"
+          codesign --verify --strict --verbose=2 build/BibleTime.saver
+          codesign -d --verbose=2 build/BibleTime.saver 2>&1 | grep -E "Authority=Developer ID Application|flags=.*runtime"
+          xcrun notarytool submit build/BibleTime-macOS.zip --key "$KEY" --key-id "$APPLE_API_KEY_ID" \
+              --issuer "$APPLE_API_ISSUER" --wait --timeout 25m --output-format json | tee "$RUNNER_TEMP/notary.json"
+          rm -f "$KEY"
+          grep -q '"status" *: *"Accepted"' "$RUNNER_TEMP/notary.json" || { echo "::error::notarization was not accepted"; exit 1; }
+          xcrun stapler staple build/BibleTime.saver
+          xcrun stapler validate build/BibleTime.saver
+          make dist
+          rm -rf build/unzipped && mkdir build/unzipped
+          unzip -q build/BibleTime-macOS.zip -d build/unzipped
+          xcrun stapler validate build/unzipped/BibleTime.saver
+          codesign --verify --strict build/unzipped/BibleTime.saver
+
+      - name: Remove signing keychain
+        if: always() && env.SIGN_MAC == 'true'
+        run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" || true
+
       - uses: actions/upload-artifact@v4
         with:
           name: BibleTime-macOS.zip
@@ -98,6 +155,9 @@ jobs:
       # Git Bash would otherwise rewrite arguments such as "/render" into C:/Program Files/Git/render.
       MSYS_NO_PATHCONV: "1"
       MSYS2_ARG_CONV_EXCL: "*"
+      # Azure Artifact Signing runs for release tags and manual runs once the secrets and variables exist (see
+      # CONTRIBUTING.md, "Signing releases"); otherwise the downloads are unsigned as before.
+      SIGN_WINDOWS: ${{ secrets.AZURE_CLIENT_ID != '' && vars.ARTIFACT_SIGNING_ENDPOINT != '' && (startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch') }}
     steps:
       - uses: actions/checkout@v4
 
@@ -126,6 +186,29 @@ jobs:
           $got = (Get-Item build/windows/bin/BibleTime.scr).VersionInfo.ProductVersion
           Write-Host "BibleTime.scr ProductVersion: $got"
           if ($got -ne $want) { throw "BibleTime.scr reports version '$got', VERSION says '$want'" }
+
+      # Signed before the screenshots, the installer and the portable zip, so all of them use the signed file.
+      - name: Sign BibleTime.scr
+        if: env.SIGN_WINDOWS == 'true'
+        uses: azure/artifact-signing-action@v2.0.0
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: ${{ vars.ARTIFACT_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ vars.ARTIFACT_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ vars.ARTIFACT_SIGNING_PROFILE }}
+          files: ${{ github.workspace }}\build\windows\bin\BibleTime.scr
+          description: BibleTime
+          description-url: https://github.com/calebtonn/BibleTime
+
+      - name: Check signature
+        if: env.SIGN_WINDOWS == 'true'
+        shell: pwsh
+        run: |
+          $sig = Get-AuthenticodeSignature "build/windows/bin/BibleTime.scr"
+          Write-Host "$($sig.Status): $($sig.SignerCertificate.Subject)"
+          if ($sig.Status -ne 'Valid') { throw "signature is $($sig.Status)" }
 
       # Same scenes as "make render" on macOS, so the two platforms can be compared side by side.
       - name: Render screenshots
@@ -189,6 +272,30 @@ jobs:
               "/O$(cygpath -w "$PWD/build/windows/installer")" \
               Windows/installer/BibleTime.iss
           ls -l build/windows/installer/BibleTime-Windows-Setup.exe
+
+      # The setup program itself. (Inno's generated uninstaller stays unsigned: signing it needs Inno's SignTool
+      # integration with a local signtool, which Artifact Signing only offers through extra client tools.)
+      - name: Sign installer
+        if: env.SIGN_WINDOWS == 'true'
+        uses: azure/artifact-signing-action@v2.0.0
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: ${{ vars.ARTIFACT_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ vars.ARTIFACT_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ vars.ARTIFACT_SIGNING_PROFILE }}
+          files: ${{ github.workspace }}\build\windows\installer\BibleTime-Windows-Setup.exe
+          description: BibleTime
+          description-url: https://github.com/calebtonn/BibleTime
+
+      - name: Check signature
+        if: env.SIGN_WINDOWS == 'true'
+        shell: pwsh
+        run: |
+          $sig = Get-AuthenticodeSignature "build/windows/installer/BibleTime-Windows-Setup.exe"
+          Write-Host "$($sig.Status): $($sig.SignerCertificate.Subject)"
+          if ($sig.Status -ne 'Valid') { throw "signature is $($sig.Status)" }
 
       # Install silently, check the saver landed in System32 and was chosen for this user, then uninstall and
       # check both are undone. (The runner's account is an administrator, so no UAC prompt appears.)

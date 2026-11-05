@@ -211,6 +211,44 @@ the MSVC build's output from the Windows job.
    `BibleTime-macOS.zip`, `BibleTime-Windows-Setup.exe` and `BibleTime-Windows-Portable.zip`. The file names carry
    no version so the README's `releases/latest/download/…` links keep working; do not rename them.
 
+## Signing releases
+
+The workflow signs the downloads when the credentials below are configured, and only for release tags and manual
+runs (**Actions › Build › Run workflow**, which is also how to test the setup without releasing). Without them
+everything still builds, unsigned on Windows and ad-hoc signed on the Mac. Each platform switches on independently.
+Add secrets and variables in **Settings › Secrets and variables › Actions**.
+
+### Windows: Azure Artifact Signing (about $10/month)
+
+1. In the Azure portal create an **Artifact Signing account**, complete **identity validation** (individuals: US or
+   Canada, with an Azure billing account of type Individual whose name and address match your ID) and create a
+   **Public Trust certificate profile**.
+2. Create an app registration (**Microsoft Entra ID › App registrations**), add a client secret, and give it the
+   **Trusted Signing Certificate Profile Signer** role on the signing account.
+3. Secrets: `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`.
+4. Variables: `ARTIFACT_SIGNING_ENDPOINT` (the account URI, e.g. `https://eus.codesigning.azure.net/`),
+   `ARTIFACT_SIGNING_ACCOUNT` (account name), `ARTIFACT_SIGNING_PROFILE` (certificate profile name).
+
+`BibleTime.scr` is signed before it goes into the installer and the portable zip, then the installer is signed;
+both signatures are checked. A new publisher still sees a SmartScreen warning until downloads build reputation (a
+few weeks), but it names you as the publisher, and Smart App Control no longer blocks it.
+
+### Mac: Developer ID and notarization ($99/year Apple Developer Program)
+
+1. In your Apple Developer account create a **Developer ID Application** certificate, install it in Keychain Access,
+   and export it with its private key as a `.p12` file with a password.
+2. In App Store Connect › **Users and Access › Integrations**, create a Team API key (Developer access is enough) and
+   download the `.p8` file.
+3. Secrets: `MACOS_CERT_P12` (`base64 -i cert.p12 | pbcopy`), `MACOS_CERT_PASSWORD`, `APPLE_API_KEY` (the whole
+   `.p8` file contents), `APPLE_API_KEY_ID`, `APPLE_API_ISSUER` (the issuer ID shown above the keys).
+
+The bundle is then signed with the hardened runtime and a timestamp (`make SIGN_IDENTITY="Developer ID Application:
+…"` does the same locally), notarized with `notarytool`, and the ticket is stapled before zipping.
+
+Once a signed release is out, simplify the README's install steps: drop the Gatekeeper "Open Anyway"/`xattr`
+instructions for the Mac and the Smart App Control note for Windows (keep the SmartScreen note until reputation
+builds).
+
 ## Pull requests
 
 Run `make test` and `make render`, look at the renders, and include a screenshot when you change anything

@@ -23,6 +23,14 @@ ARCHS     ?= arm64 x86_64
 SDK       := $(shell xcrun --show-sdk-path)
 SWIFTC    ?= swiftc
 PYTHON    ?= python3
+# "-" signs ad hoc (local builds, CI without secrets). Set to a "Developer ID Application: ..." identity to sign for
+# distribution: that adds the hardened runtime and a secure timestamp, which notarization requires.
+SIGN_IDENTITY ?= -
+ifeq ($(SIGN_IDENTITY),-)
+CODESIGN_FLAGS :=
+else
+CODESIGN_FLAGS := --options runtime --timestamp
+endif
 
 BUILD_DIR := build
 BUNDLE    := $(BUILD_DIR)/$(NAME).saver
@@ -57,7 +65,7 @@ $(BUNDLE): $(ARCH_BINS) $(PLIST) $(RESOURCES) VERSION Makefile
 	sed -e 's/$$(MARKETING_VERSION)/$(VERSION)/' -e 's/$$(CURRENT_PROJECT_VERSION)/$(BUILD)/' $(PLIST) > $@/Contents/Info.plist
 	printf 'BNDL????' > $@/Contents/PkgInfo
 	cp -R Resources/ $@/Contents/Resources/
-	codesign --force --deep --sign - $@
+	codesign --force --deep $(CODESIGN_FLAGS) --sign "$(SIGN_IDENTITY)" $@
 	@echo "built $@ ($(VERSION) build $(BUILD))"
 
 # --- Development loop --------------------------------------------------------
