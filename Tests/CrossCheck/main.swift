@@ -102,7 +102,7 @@ func loadTranslation(_ id: String) -> Translation {
     return t
 }
 
-let translationIDs = ["kjv", "web", "asv"]
+let translationIDs = ["kjv", "dby"]
 
 emit("# BibleTime cross-check 1")
 

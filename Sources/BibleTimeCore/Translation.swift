@@ -143,7 +143,7 @@ public struct TranslationInfo: Equatable, Sendable, Identifiable {
         self.isImported = isImported
     }
 
-    /// "World English Bible (WEB)"
+    /// "Darby Translation (DBY)"
     public var displayName: String { "\(name) (\(abbreviation))" }
 }
 
@@ -163,8 +163,7 @@ public final class TranslationCatalog: @unchecked Sendable {
     /// Known bundled translations, so the picker can list names without parsing the full files.
     public static let bundled: [(id: String, name: String, abbreviation: String)] = [
         ("kjv", "King James Version", "KJV"),
-        ("web", "World English Bible", "WEB"),
-        ("asv", "American Standard Version", "ASV"),
+        ("dby", "Darby Translation", "DBY"),
     ]
 
     public static func isBundledID(_ id: String) -> Bool { bundled.contains { $0.id == id } }

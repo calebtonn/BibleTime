@@ -15,8 +15,7 @@ constexpr Entry kEntries[] = {
     {"curated.json", IDR_CURATED_JSON},
     {"hour_verses.json", IDR_HOUR_VERSES_JSON},
     {"Translations/kjv.json", IDR_KJV_JSON},
-    {"Translations/web.json", IDR_WEB_JSON},
-    {"Translations/asv.json", IDR_ASV_JSON},
+    {"Translations/dby.json", IDR_DBY_JSON},
 };
 }  // namespace
 

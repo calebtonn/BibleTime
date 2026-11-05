@@ -1,6 +1,6 @@
 # BibleTime.scr: the Windows screen saver (included from Windows/CMakeLists.txt on WIN32).
 #
-# A single self-contained executable: the verse data (books, curated lists, KJV/WEB/ASV) is embedded as RCDATA,
+# A single self-contained executable: the verse data (books, curated lists, KJV/Darby) is embedded as RCDATA,
 # the CRT is linked statically, and only DLLs that ship with Windows 10/11 are used.
 
 set(BT_APP_DIR "${CMAKE_CURRENT_LIST_DIR}")
@@ -21,8 +21,7 @@ set(BT_EMBEDDED_FILES
     "${BT_RESOURCES_ABS}/curated.json"
     "${BT_RESOURCES_ABS}/hour_verses.json"
     "${BT_RESOURCES_ABS}/Translations/kjv.json"
-    "${BT_RESOURCES_ABS}/Translations/web.json"
-    "${BT_RESOURCES_ABS}/Translations/asv.json"
+    "${BT_RESOURCES_ABS}/Translations/dby.json"
     "${BT_RES_DIR}/BibleTime.manifest"
     "${BT_RES_DIR}/BibleTime.ico"
     "${BT_RES_DIR}/resource.h")

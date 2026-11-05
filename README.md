@@ -5,8 +5,8 @@ verse is the minute: at 3:16 you'll see John 3:16, at 4:13 Philippians 4:13, and
 
 ![BibleTime, Clock layout, Paper theme](docs/clock-paper.png)
 
-It's free, works offline, and includes three public-domain Bible translations (King James Version, World English
-Bible and American Standard Version).
+It's free, works offline, and includes two public-domain Bible translations (the King James Version and the
+Darby Translation).
 
 ## Download
 
@@ -88,8 +88,8 @@ open the **Go** menu to see **Library**).
 
 ## Features
 
-- **Three public-domain translations**, bundled and offline: King James Version, World English Bible, and
-  American Standard Version. You can [add others](#other-translations-esv-csb-lsb-niv-) you own.
+- **Two public-domain translations**, bundled and offline: the King James Version and the Darby Translation
+  (J. N. Darby, 1890). You can [add others](#other-translations-esv-csb-lsb-net-niv-) you own.
 - **Well-known verses first.** When a famous verse matches the minute (John 3:16, Philippians 4:13,
   Hebrews 11:1, Proverbs 3:5, Romans 8:28, Matthew 6:33 ...) it takes priority. Otherwise a verse is drawn
   from every book that has that chapter and verse, rotating daily (at midnight UTC) so every computer, Mac or PC,
@@ -120,7 +120,7 @@ On Windows: Screen Saver Settings › **Settings…**. On a Mac: Screen Saver �
 
 | Setting | Values | Default |
 | --- | --- | --- |
-| Translation | KJV, WEB, ASV, or any you import | KJV |
+| Translation | KJV, Darby, or any you import | KJV |
 | Hours | Follow System, 12-hour, 24-hour | Follow System |
 | Appearance | Automatic, Paper, Night | Automatic (Night in dark mode or 8 pm–7 am) |
 | Layout | Clock, Centered, Book | Clock |
@@ -137,9 +137,10 @@ The Windows typefaces are the closest matches that ship with Windows, listed in 
 (Sitka for New York, Cambria for Charter, and so on). Windows keeps the settings in
 `%APPDATA%\BibleTime\settings.json`.
 
-## Other translations (ESV, CSB, LSB, NIV …)
+## Other translations (ESV, CSB, LSB, NET, NIV …)
 
-Modern translations are copyrighted, so BibleTime cannot ship them. If you hold a copy you are licensed to
+Modern translations are copyrighted, so BibleTime cannot ship them. That includes the NET Bible, which is free to
+read but whose publisher requires written permission to redistribute the full text. If you hold a copy you are licensed to
 use (for example a USFX export of a module you bought), you can convert it and import it for your own use.
 Converting needs Python 3 and a copy of this repository:
 
@@ -271,5 +272,4 @@ Bible Clock.
 
 The code, build scripts and artwork are MIT licensed; see [LICENSE](LICENSE). That license does not cover
 the Scripture text in `Resources/Translations/`, which is public domain; its provenance is recorded in
-[DATA-LICENSE.md](DATA-LICENSE.md). "World English Bible" is a trademark of eBible.org; the text is shipped
-unmodified apart from the formatting described there.
+[DATA-LICENSE.md](DATA-LICENSE.md). The text is shipped unmodified apart from the formatting described there.

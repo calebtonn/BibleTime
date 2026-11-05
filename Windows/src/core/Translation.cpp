@@ -317,8 +317,7 @@ ResourceLoader directoryLoader(fs::path directory) {
 const std::vector<TranslationCatalog::BundledEntry>& TranslationCatalog::bundled() {
     static const std::vector<BundledEntry> entries = {
         {"kjv", "King James Version", "KJV"},
-        {"web", "World English Bible", "WEB"},
-        {"asv", "American Standard Version", "ASV"},
+        {"dby", "Darby Translation", "DBY"},
     };
     return entries;
 }

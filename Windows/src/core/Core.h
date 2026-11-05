@@ -136,7 +136,7 @@ struct TranslationInfo {
     /// Empty for bundled translations (they come from the resource loader).
     std::filesystem::path path;
     bool isImported = false;
-    /// "World English Bible (WEB)"
+    /// "Darby Translation (DBY)"
     std::string displayName() const { return name + " (" + abbreviation + ")"; }
     bool operator==(const TranslationInfo& o) const {
         return id == o.id && name == o.name && abbreviation == o.abbreviation && path == o.path && isImported == o.isImported;
@@ -172,7 +172,7 @@ int compareNames(const std::string& a, const std::string& b);
 class TranslationCatalog {
 public:
     struct BundledEntry { const char* id; const char* name; const char* abbreviation; };
-    /// kjv, web, asv.
+    /// kjv, dby.
     static const std::vector<BundledEntry>& bundled();
     static bool isBundledID(std::string_view id);
 

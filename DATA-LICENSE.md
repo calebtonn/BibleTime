@@ -7,22 +7,23 @@ from the public-domain editions published by [eBible.org](https://ebible.org)
 and is distributed here under the terms quoted below, which are reproduced
 from the `copr.htm` file shipped inside each eBible download.
 
-All three translations are in the Public Domain. `Tools/build_verses.py`
+Both translations are in the Public Domain. `Tools/build_verses.py`
 regenerates the JSON files from the USFX downloads; it keeps only the verse
 text (footnotes, cross-references, section headings, Psalm superscriptions,
 Strong's numbers, pilcrows and typographic square brackets are removed, and
 whitespace is collapsed). Only chapters 1-23 / verses 1-60 plus a short list
 of curated references are included.
 
-Downloaded: 3 November 2026 (data as published by eBible.org on 30 October 2026).
+Downloaded: 5 November 2026 by the "Verse data" GitHub workflow (`.github/workflows/data.yml`), whose log
+records the hashes and `copr.htm` text below.
 
 ## King James Version (KJV)
 
 * eBible edition: **King James (Authorized) Version** (eBible id `eng-kjv2006`)
 * Download: <https://ebible.org/Scriptures/eng-kjv2006_usfx.zip>
 * Edition page: <https://ebible.org/eng-kjv2006>
-* eBible stamp: "HTML generated with Haiola by eBible.org 30 Oct 2026 from source files dated 26 Sep 2026"
-* sha256 `eng-kjv2006_usfx.zip`: `007cd93edfcbedb22b571882ec728bef5650638a4045fccda2e8e1a70e944690`
+* eBible stamp: "HTML generated with Haiola by eBible.org 4 Nov 2026 from source files dated 3 Nov 2026"
+* sha256 `eng-kjv2006_usfx.zip`: `7ac7a2de6f304fede9d37cc4fc82bcc09916442b5035c9b51a97f7f4339e78fe`
 * sha256 `eng-kjv2006_usfx.xml` (the file parsed): `e2c45a1f6afbdc3463fd7aa51fcb138e79a4e60f9132884d3b9b9fb22012f4d8`
 
 From `copr.htm`:
@@ -47,62 +48,30 @@ From `copr.htm`:
 >
 > You may copy the King James Version of the Holy Bible freely.
 
-## World English Bible (WEB)
+## Darby Translation (DBY)
 
-* eBible edition: **World English Bible** (eBible id `engwebp`; the
-  66-book edition that renders the divine name as "LORD" — not the "Classic"
-  `eng-web` edition with the Apocrypha and "Yahweh")
-* Download: <https://ebible.org/Scriptures/engwebp_usfx.zip>
-* Edition page: <https://ebible.org/engwebp>
-* eBible stamp: "2020 stable text edition" / "HTML generated with Haiola by eBible.org 30 Oct 2026 from source files dated 30 Oct 2026"
-* sha256 `engwebp_usfx.zip`: `66f99b22a380d8ef8dbd9d401806fc02be3650e5fe3dbb0cec4d9693b53e1e44`
-* sha256 `engwebp_usfx.xml` (the file parsed): `c43cb484e4b3f36e6cd977d8bdcf8a51425fd9bf1e9412d9e8b8b240f2932bf0`
-
-From `copr.htm`:
-
-> The World English Bible is in the Public Domain. That means that it is not
-> copyrighted. However, "World English Bible" is a Trademark of eBible.org.
->
-> You may copy, publish, proclaim, distribute, redistribute, sell, give away,
-> quote, memorize, read publicly, broadcast, transmit, share, back up, post on
-> the Internet, print, reproduce, preach, teach from, and use the World English
-> Bible as much as you want, and others may also do so. All we ask is that if
-> you CHANGE the actual text of the World English Bible in any way, you not
-> call the result the World English Bible any more. This is to avoid
-> confusion, not to limit your freedom. The Holy Bible is God's Word. It
-> belongs to God. He gave it to us freely, and we who have worked on this
-> translation freely give it to you by dedicating it to the Public Domain.
->
-> The master copy of this Bible translation is posted on
-> https://eBible.org/web/ and at https://WorldEnglish.Bible.
->
-> This is the updated World English Bible with the 66-book protocanon only.
-
-BibleTime does not change the wording of the World English Bible text. The
-build tool only omits apparatus (footnotes, cross-references, headings, Psalm
-superscriptions) and normalises whitespace, so the verses are shown under the
-name "World English Bible". If you modify the verse text itself, the trademark
-clause above requires you to stop calling the result the World English Bible.
-
-## American Standard Version (ASV)
-
-* eBible edition: **American Standard Version (1901)** (eBible id `eng-asv`)
-* Download: <https://ebible.org/Scriptures/eng-asv_usfx.zip>
-* Edition page: <https://ebible.org/eng-asv>
-* eBible stamp: "HTML generated with Haiola by eBible.org 30 Oct 2026 from source files dated 30 Oct 2026"
-* sha256 `eng-asv_usfx.zip`: `ef54be42be5eba7a0a40a132007df00d0e1fd56fca3a7d172355a97d1b5ad7bd`
-* sha256 `eng-asv_usfx.xml` (the file parsed): `31ba1861a6a9de52b8a862d675e21e4ec4e7bc74a75c5e61ec62f95612645633`
+* eBible edition: **Darby Translation**, "The Holy Scriptures, a New Translation from the Original Languages by
+  J. N. Darby" (complete edition 1890; eBible id `engDBY`)
+* Download: <https://ebible.org/Scriptures/engDBY_usfx.zip>
+* Edition page: <https://ebible.org/engDBY>
+* eBible stamp: "HTML generated with Haiola by eBible.org 30 Oct 2026 from source files dated 16 Nov 2019"
+* sha256 `engDBY_usfx.zip`: `498058e7250d204aa14292625dcdc0f251d6e4ac14daa5ca8098e37689034b27`
+* sha256 `engDBY_usfx.xml` (the file parsed): `9993edecce9b6a9d624235e2ae35510c1c5642b6a69035b75085986ba190a2f1`
 
 From `copr.htm`:
 
-> The American Standard Version of the Holy Bible, first published in 1901.
+> The Holy Scriptures, a New Translation from the Original Languages by J. N. Darby
 >
 > Public Domain
 >
-> This public domain Bible translation is brought to you courtesy of eBible.org.
->
-> The American Standard Version of the Holy Bible is in the Public Domain.
-> Copy freely.
+> Translation by: J. N. Darby
+
+## Not bundled: NET Bible
+
+The NET Bible® is copyrighted by Biblical Studies Press, L.L.C. It is free to read and to quote within the
+publisher's limits, but distributing the full text electronically requires the publisher's written permission,
+so BibleTime does not ship it. Someone with a licensed copy can convert and import it for personal use (see the
+README).
 
 ## Other generated files
 

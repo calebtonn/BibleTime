@@ -10,8 +10,7 @@
 #define IDR_CURATED_JSON 202
 #define IDR_HOUR_VERSES_JSON 203
 #define IDR_KJV_JSON 204
-#define IDR_WEB_JSON 205
-#define IDR_ASV_JSON 206
+#define IDR_DBY_JSON 205
 
 // Options dialog (2003 is DLG_SCRNSAVECONFIGURE in scrnsave.h).
 #define IDD_OPTIONS 2003

@@ -134,7 +134,7 @@ int main(int argc, char** argv) {
         }
         return t;
     };
-    const std::vector<std::string> translationIDs = {"kjv", "web", "asv"};
+    const std::vector<std::string> translationIDs = {"kjv", "dby"};
     const LocaleInfo enUS{false, "AM", "PM"};
 
     emit("# BibleTime cross-check 1");

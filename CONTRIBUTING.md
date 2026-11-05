@@ -88,6 +88,15 @@ Regenerate with `make data` (downloads the sources) and check the result with `m
 not hand-edit the generated files. Changes to the curated lists go in `Tools/build_verses.py` or the
 `curated.json` / `hour_verses.json` inputs, and the tests in `Tests/CoreTests` must keep passing.
 
+The bundled set is the `TRANSLATIONS` list in `Tools/build_verses.py` (currently KJV and Darby). Changing it also
+means updating `TranslationCatalog.bundled` in both cores (`Sources/BibleTimeCore/Translation.swift` and
+`Windows/src/core/Translation.cpp`), the embedded resources in `Windows/res/BibleTime.rc.in`,
+`Windows/res/resource.h`, `Windows/src/app/Resources.cpp` and `App.cmake`, the tests, and `DATA-LICENSE.md`.
+
+If you cannot reach eBible.org, push the generator change to a branch: the **Verse data** workflow
+(`.github/workflows/data.yml`) regenerates `Resources/` on GitHub, commits it to the branch, and logs the download
+hashes and `copr.htm` text that `DATA-LICENSE.md` records.
+
 ## Imported translations
 
 `TranslationImporter` (core) validates a file and copies it to the first of `VerseClock.defaultImportDirectories()`.

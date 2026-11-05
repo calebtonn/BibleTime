@@ -50,7 +50,7 @@ check(canon.parse(reference: "Nowhere 1:1") == nil, "unknown book is nil")
 check(canon.parse(reference: "John") == nil, "missing numbers is nil")
 
 section("translations")
-check(clock.catalog.available.map(\.id) == ["kjv", "web", "asv"], "kjv, web, asv available: \(clock.catalog.available.map(\.id))")
+check(clock.catalog.available.map(\.id) == ["kjv", "dby"], "kjv, dby available: \(clock.catalog.available.map(\.id))")
 var translations: [Translation] = []
 for info in clock.catalog.available {
     do {
@@ -59,7 +59,7 @@ for info in clock.catalog.available {
         check(false, "load \(info.id): \(error)")
     }
 }
-check(translations.count == 3, "loaded 3 translations")
+check(translations.count == 2, "loaded 2 translations")
 for t in translations {
     check(t.verseCount > 20_000, "\(t.id) has \(t.verseCount) verses")
     let john = t[VerseRef(book: "JHN", chapter: 3, verse: 16)]
@@ -269,9 +269,9 @@ do {
     check(c24.clock == "15:16", "24h clock string: \(c24.clock)")
     check(c24.reference.hasSuffix("15:16"), "24h reference: \(c24.reference)")
     prefs.hourStyle = .twelveHour
-    prefs.translation = "web"
-    let web = try clock.content(for: date(2026, 11, 3, 15, 16), preferences: prefs, calendar: utc, locale: us)
-    check(web.translation == "WEB" && web.reference == "John 03:16" && web.text.contains("whoever believes"), "WEB wording: \(web.reference) \(web.text)")
+    prefs.translation = "dby"
+    let darby = try clock.content(for: date(2026, 11, 3, 15, 16), preferences: prefs, calendar: utc, locale: us)
+    check(darby.translation == "DBY" && darby.reference == "John 03:16" && darby.text.contains("whosoever believes on him"), "Darby wording: \(darby.reference) \(darby.text)")
     prefs.translation = "nope"
     let fallback = try clock.content(for: date(2026, 11, 3, 15, 16), preferences: prefs, calendar: utc, locale: us)
     check(fallback.translation == "KJV", "unknown translation falls back to first available")
@@ -317,7 +317,7 @@ func fakeTranslation(id: String, name: String = "Test Version", abbreviation: St
 
 do {
     let importing = try VerseClock(resources: resources, importDirectories: [importDir, dropDir])
-    check(importing.catalog.available.map(\.id) == ["kjv", "web", "asv"], "no imports yet")
+    check(importing.catalog.available.map(\.id) == ["kjv", "dby"], "no imports yet")
     guard let importer = importing.importer else { check(false, "importer available"); exit(1) }
     check(importer.destination == importDir, "imports go to the first directory")
 
@@ -326,7 +326,7 @@ do {
     let info = try importer.importFile(at: source)
     check(info.id == "test-1" && info.isImported && info.url == importDir.appendingPathComponent("test-1.json"), "imported as test-1.json: \(info)")
     importing.catalog.rescan()
-    check(importing.catalog.available.map(\.id) == ["kjv", "web", "asv", "test-1"], "catalog lists the import: \(importing.catalog.available.map(\.id))")
+    check(importing.catalog.available.map(\.id) == ["kjv", "dby", "test-1"], "catalog lists the import: \(importing.catalog.available.map(\.id))")
     check(importing.catalog.info(id: "test-1")?.displayName == "Test Version (TEST)", "display name")
     var p = Preferences(); p.translation = "test-1"; p.hourStyle = .twelveHour
     let content = try importing.content(for: date(2026, 11, 3, 15, 16), preferences: p, calendar: utc, locale: us)
@@ -338,7 +338,7 @@ do {
     try fakeTranslation(id: "dropped", name: "Dropped", abbreviation: "DRP").write(to: dropDir.appendingPathComponent("anything.json"))
     try fakeTranslation(id: "test-1", name: "Shadowed").write(to: dropDir.appendingPathComponent("shadow.json"))
     importing.catalog.rescan()
-    check(importing.catalog.available.map(\.id) == ["kjv", "web", "asv", "dropped", "test-1"], "manual drop folder is scanned and the first directory wins: \(importing.catalog.available.map(\.id))")
+    check(importing.catalog.available.map(\.id) == ["kjv", "dby", "dropped", "test-1"], "manual drop folder is scanned and the first directory wins: \(importing.catalog.available.map(\.id))")
     check(importing.catalog.info(id: "test-1")?.name == "Test Version", "duplicate id in a later directory is ignored")
 
     // Re-import replaces in place.
@@ -368,7 +368,7 @@ do {
     try importer.remove(info)
     try importer.remove(importing.catalog.info(id: "kjv")!)
     importing.catalog.rescan()
-    check(importing.catalog.available.map(\.id) == ["kjv", "web", "asv", "dropped"], "removed import disappears, bundled stay: \(importing.catalog.available.map(\.id))")
+    check(importing.catalog.available.map(\.id) == ["kjv", "dby", "dropped"], "removed import disappears, bundled stay: \(importing.catalog.available.map(\.id))")
     check(!FileManager.default.fileExists(atPath: info.url.path), "file deleted")
     p.translation = "test-1"
     let fallback = try importing.content(for: date(2026, 11, 3, 15, 16), preferences: p, calendar: utc, locale: us)

@@ -131,8 +131,8 @@ int main(int argc, char** argv) {
     check(canon.order("GEN") == 0 && canon.order("REV") == 65 && canon.order("XYZ") == -1, "canonical order");
 
     section("translations");
-    check(ids(clock.catalog().available()) == std::vector<std::string>({"kjv", "web", "asv"}),
-          "kjv, web, asv available: " + join(ids(clock.catalog().available())));
+    check(ids(clock.catalog().available()) == std::vector<std::string>({"kjv", "dby"}),
+          "kjv, dby available: " + join(ids(clock.catalog().available())));
     std::vector<std::shared_ptr<const Translation>> translations;
     for (const auto& info : clock.catalog().available()) {
         try {
@@ -144,7 +144,7 @@ int main(int argc, char** argv) {
             check(false, "load " + info.id + ": " + e.what());
         }
     }
-    check(translations.size() == 3, "loaded 3 translations");
+    check(translations.size() == 2, "loaded 2 translations");
     for (const auto& t : translations) {
         check(t->verseCount() > 20000, t->id() + " has " + std::to_string(t->verseCount()) + " verses");
         const Verse* john = t->find(VerseRef("JHN", 3, 16));
@@ -432,9 +432,9 @@ int main(int argc, char** argv) {
         check(c24.clock == "15:16", "24h clock string: " + c24.clock);
         check(c24.reference.size() >= 5 && c24.reference.compare(c24.reference.size() - 5, 5, "15:16") == 0, "24h reference: " + c24.reference);
         prefs.hourStyle = HourStyle::TwelveHour;
-        prefs.translation = "web";
-        const DisplayContent web = clock.content(date(2026, 11, 3, 15, 16), prefs, us);
-        check(web.translation == "WEB" && web.reference == "John 03:16" && web.text.find("whoever believes") != std::string::npos, "WEB wording: " + web.reference + " " + web.text);
+        prefs.translation = "dby";
+        const DisplayContent darby = clock.content(date(2026, 11, 3, 15, 16), prefs, us);
+        check(darby.translation == "DBY" && darby.reference == "John 03:16" && darby.text.find("whosoever believes on him") != std::string::npos, "Darby wording: " + darby.reference + " " + darby.text);
         prefs.translation = "nope";
         const DisplayContent fallback = clock.content(date(2026, 11, 3, 15, 16), prefs, us);
         check(fallback.translation == "KJV", "unknown translation falls back to first available");
@@ -487,7 +487,7 @@ int main(int argc, char** argv) {
         check(Preferences::fromJSONText(R"({"textScale": false})").textScale == Preferences::textScaleMin, "textScale false is 0.0, clamped");
         check(Preferences::fromJSONText(R"({"textScale": 1.25})").textScale == 1.25, "fractional textScale");
         check(Preferences::fromJSONText(R"({"textScale": null})").textScale == 1.0, "null textScale ignored");
-        check(Preferences::fromJSONText(R"({"translation": ""})").translation == "kjv" && Preferences::fromJSONText(R"({"translation": "web"})").translation == "web", "empty translation keeps the default");
+        check(Preferences::fromJSONText(R"({"translation": ""})").translation == "kjv" && Preferences::fromJSONText(R"({"translation": "dby"})").translation == "dby", "empty translation keeps the default");
         check(Preferences::fromJSONText("not json") == defaults && Preferences::fromJSONText("[1,2]") == defaults, "malformed JSON yields defaults");
         Preferences p;
         p.hourStyle = HourStyle::TwentyFourHour;
@@ -497,7 +497,7 @@ int main(int argc, char** argv) {
         p.hourStyle = HourStyle::System;
         check(p.uses24Hour(true) && !p.uses24Hour(false), "system follows the locale");
         Preferences custom;
-        custom.translation = "web";
+        custom.translation = "dby";
         custom.hourStyle = HourStyle::TwentyFourHour;
         custom.theme = ThemeChoice::Night;
         custom.layout = LayoutStyle::Book;
@@ -744,11 +744,11 @@ int main(int argc, char** argv) {
         header("e.json", "same1", "same");
         header("f.json", "beta", "beta");
         VerseClock sorting(directoryLoader(resources), {sortRoot});
-        check(ids(sorting.catalog().available()) == std::vector<std::string>({"kjv", "web", "asv", "alpha", "beta", "same2", "same1", "zeta", "eclair"}),
+        check(ids(sorting.catalog().available()) == std::vector<std::string>({"kjv", "dby", "alpha", "beta", "same2", "same1", "zeta", "eclair"}),
               "imported sorted case-insensitively, ties keep file order: " + join(ids(sorting.catalog().available())));
         setNameComparator([](const std::string& a, const std::string& b) { return unicode::caseInsensitiveCompare(b, a); });
         sorting.catalog().rescan();
-        check(ids(sorting.catalog().available()) == std::vector<std::string>({"kjv", "web", "asv", "eclair", "zeta", "same2", "same1", "beta", "alpha"}),
+        check(ids(sorting.catalog().available()) == std::vector<std::string>({"kjv", "dby", "eclair", "zeta", "same2", "same1", "beta", "alpha"}),
               "installed comparator decides the order: " + join(ids(sorting.catalog().available())));
         setNameComparator(nullptr);
         sorting.catalog().rescan();
@@ -785,7 +785,7 @@ int main(int argc, char** argv) {
 
     try {
         VerseClock importing(directoryLoader(resources), {importDir, dropDir});
-        check(ids(importing.catalog().available()) == std::vector<std::string>({"kjv", "web", "asv"}), "no imports yet");
+        check(ids(importing.catalog().available()) == std::vector<std::string>({"kjv", "dby"}), "no imports yet");
         const auto importerOpt = importing.importer();
         check(importerOpt.has_value(), "importer available");
         if (!importerOpt) return 1;
@@ -798,7 +798,7 @@ int main(int argc, char** argv) {
         check(info.id == "test-1" && info.isImported && info.path == importDir / "test-1.json", "imported as test-1.json: " + info.path.u8string());
         check(!fs::exists(importDir / ".test-1.json.part"), "temporary file renamed away");
         importing.catalog().rescan();
-        check(ids(importing.catalog().available()) == std::vector<std::string>({"kjv", "web", "asv", "test-1"}), "catalog lists the import: " + join(ids(importing.catalog().available())));
+        check(ids(importing.catalog().available()) == std::vector<std::string>({"kjv", "dby", "test-1"}), "catalog lists the import: " + join(ids(importing.catalog().available())));
         check(importing.catalog().info("test-1") && importing.catalog().info("test-1")->displayName() == "Test Version (TEST)", "display name");
         Preferences p;
         p.translation = "test-1";
@@ -835,7 +835,7 @@ int main(int argc, char** argv) {
         writeText(dropDir / "notes.txt", "not a translation");
         writeText(dropDir / "broken.json", "{\"id\": ");
         importing.catalog().rescan();
-        check(ids(importing.catalog().available()) == std::vector<std::string>({"kjv", "web", "asv", "dropped", "test-1"}),
+        check(ids(importing.catalog().available()) == std::vector<std::string>({"kjv", "dby", "dropped", "test-1"}),
               "manual drop folder is scanned and the first directory wins: " + join(ids(importing.catalog().available())));
         check(importing.catalog().info("test-1") && importing.catalog().info("test-1")->name == "Test Version", "duplicate id in a later directory is ignored");
 
@@ -906,7 +906,7 @@ int main(int argc, char** argv) {
         importer.remove(info);
         importer.remove(*importing.catalog().info("kjv"));
         importing.catalog().rescan();
-        check(ids(importing.catalog().available()) == std::vector<std::string>({"kjv", "web", "asv", "dropped"}),
+        check(ids(importing.catalog().available()) == std::vector<std::string>({"kjv", "dby", "dropped"}),
               "removed import disappears, bundled stay: " + join(ids(importing.catalog().available())));
         check(!fs::exists(info.path), "file deleted");
         p.translation = "test-1";
@@ -945,9 +945,9 @@ int main(int argc, char** argv) {
         Preferences p;
         p.hourStyle = HourStyle::TwelveHour;
         check(!badCurated.content(at(15, 16, 99), p, us).text.empty(), "selection still works without curated lists");
-        VerseClock onlyWeb([real](const std::string& name) { return name == "Translations/kjv.json" || name == "Translations/asv.json" ? std::nullopt : real(name); }, {});
-        check(ids(onlyWeb.catalog().available()) == std::vector<std::string>({"web"}), "only the bundled files the loader has");
-        check(onlyWeb.translation(p)->id() == "web", "kjv preference falls back to the first available");
+        VerseClock onlyDarby([real](const std::string& name) { return name == "Translations/kjv.json" ? std::nullopt : real(name); }, {});
+        check(ids(onlyDarby.catalog().available()) == std::vector<std::string>({"dby"}), "only the bundled files the loader has");
+        check(onlyDarby.translation(p)->id() == "dby", "kjv preference falls back to the first available");
         const CuratedVerses keys = CuratedVerses::fromJSON(R"({"3::16":[["JHN",3,16]],"13:01":[["GEN",1,1]],"x:1":[],"12:00":[["PSA",1,1,"extra"]]})", "[]");
         check(keys.bySlot.size() == 2 && keys.bySlot.count(3 * 60 + 16) && keys.bySlot.count(12 * 60), "curated keys parse like Swift's split and Int()");
     }
