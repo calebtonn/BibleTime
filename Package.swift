@@ -14,5 +14,7 @@ let package = Package(
     targets: [
         .target(name: "BibleTimeCore", path: "Sources/BibleTimeCore"),
         .executableTarget(name: "CoreTests", dependencies: ["BibleTimeCore"], path: "Tests/CoreTests"),
+        // Prints the core's choices for comparison with the Windows C++ port; see `make crosscheck`.
+        .executableTarget(name: "CrossCheck", dependencies: ["BibleTimeCore"], path: "Tests/CrossCheck"),
     ]
 )

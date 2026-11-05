@@ -1,0 +1,70 @@
+name: Verse data
+
+# Regenerates Resources/ from the eBible.org sources ("make data") whenever the generator or the curated lists
+# change on a branch, or on demand, and commits the result to that branch. The log and the artifact carry the
+# provenance (download hashes and each copr.htm) that DATA-LICENSE.md records.
+on:
+  push:
+    branches-ignore: [main]
+    paths:
+      - Tools/build_verses.py
+      - Tools/lists/**
+      - .github/workflows/data.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  data:
+    name: Regenerate verse data
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Build and verify
+        run: |
+          set -euo pipefail
+          mkdir -p Tools/data
+          python3 -I Tools/build_verses.py all --data-dir Tools/data --download \
+              --curated Tools/lists/curated_verses.json --hours Tools/lists/hour_verses.json --out-dir Resources \
+              2>&1 | tee Tools/data/build.log
+          python3 -I Tools/build_verses.py verify --resources Resources \
+              --curated Tools/lists/curated_verses.json --hours Tools/lists/hour_verses.json
+
+      - name: Provenance
+        run: |
+          set -euo pipefail
+          for dir in Tools/data/*/; do
+            id=$(basename "$dir")
+            echo "::group::$id"
+            sha256sum "$dir"*.zip "$dir"*_usfx.xml
+            echo "--- copr.htm"
+            sed -e 's/<[^>]*>//g' "$dir/copr.htm" | sed '/^[[:space:]]*$/d'
+            echo "::endgroup::"
+          done
+          ls -l Resources Resources/Translations
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: verse-data-provenance
+          path: |
+            Tools/data/build.log
+            Tools/data/*/copr.htm
+
+      - name: Commit regenerated data
+        run: |
+          set -euo pipefail
+          git add -A Resources
+          if git diff --cached --quiet; then echo "Resources/ already up to date"; exit 0; fi
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -m "Regenerate verse data from eBible.org"
+          git push origin "HEAD:${GITHUB_REF_NAME}"

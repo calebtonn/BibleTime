@@ -41,8 +41,7 @@ Typical use (from the repository root):
       --out ~/Desktop/esv.json
 
   python3 -I Tools/build_verses.py lists \
-      --translations Resources/Translations/kjv.json Resources/Translations/web.json \
-                     Resources/Translations/asv.json \
+      --translations Resources/Translations/kjv.json Resources/Translations/dby.json \
       --books-source /path/to/eng-kjv2006_usfx.xml \
       --curated /path/to/curated_verses.json --hours /path/to/hour_verses.json \
       --out-dir Resources
@@ -101,8 +100,7 @@ EBIBLE_SCRIPTURES = "https://ebible.org/Scriptures/"
 # <data-dir>/<ebible_id>/copr.htm (both come out of the eBible USFX zip).
 TRANSLATIONS = [
     {"id": "kjv", "ebible_id": "eng-kjv2006", "name": "King James Version", "abbreviation": "KJV"},
-    {"id": "web", "ebible_id": "engwebp", "name": "World English Bible", "abbreviation": "WEB"},
-    {"id": "asv", "ebible_id": "eng-asv", "name": "American Standard Version", "abbreviation": "ASV"},
+    {"id": "dby", "ebible_id": "engDBY", "name": "Darby Translation", "abbreviation": "DBY"},
 ]
 
 
@@ -680,7 +678,10 @@ def download_usfx(ebible_id, data_dir):
     os.makedirs(dest_dir, exist_ok=True)
     zip_path = os.path.join(dest_dir, ebible_id + "_usfx.zip")
     log("[download] %s -> %s" % (url, zip_path))
-    with urllib.request.urlopen(url, timeout=60) as resp, open(zip_path, "wb") as f:
+    # eBible.org refuses Python's default User-Agent (HTTP 403), so name this tool instead.
+    request = urllib.request.Request(url, headers={
+        "User-Agent": "BibleTime-data-builder/1.0 (+https://github.com/calebtonn/BibleTime)"})
+    with urllib.request.urlopen(request, timeout=60) as resp, open(zip_path, "wb") as f:
         while True:
             chunk = resp.read(1 << 20)
             if not chunk:
@@ -924,6 +925,13 @@ def main(argv=None):
                 chapters = ch
         if chapters is None:
             chapters = ch
+        # Drop translation files this list no longer builds, so Resources holds exactly TRANSLATIONS.
+        keep = {t["id"] + ".json" for t in TRANSLATIONS}
+        tdir = os.path.join(args.out_dir, "Translations")
+        for name in sorted(os.listdir(tdir)):
+            if name.endswith(".json") and name not in keep:
+                log("[all] removing %s (not in TRANSLATIONS)" % os.path.join(tdir, name))
+                os.remove(os.path.join(tdir, name))
         build_lists(docs, curated, hours, chapters, args.out_dir)
         return 0
 

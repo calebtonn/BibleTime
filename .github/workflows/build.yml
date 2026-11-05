@@ -1,21 +1,34 @@
 name: Build
 
+# Every push and pull request builds and tests both platforms. A tag "v<version>" (matching VERSION) also publishes
+# one GitHub release with the three downloads the README links to:
+#   BibleTime-macOS.zip, BibleTime-Windows-Setup.exe, BibleTime-Windows-Portable.zip
 on:
   push:
-    branches: [main]
+    branches: ["**"]
     tags: ["v*"]
   pull_request:
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
-  build:
+  macos:
+    name: macOS
     runs-on: macos-15
+    env:
+      # Developer ID signing and notarization run for release tags and manual runs once the secrets exist
+      # (see CONTRIBUTING.md, "Signing releases"); otherwise the bundle is signed ad hoc as before.
+      SIGN_MAC: ${{ secrets.MACOS_CERT_P12 != '' && secrets.APPLE_API_KEY != '' && (startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch') }}
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0 # the build number is the commit count
 
       - name: Toolchain
         run: |
@@ -24,6 +37,31 @@ jobs:
 
       - name: Unit tests
         run: make test
+
+      - name: Cross-check the Windows C++ core against the Swift core
+        run: make crosscheck
+
+      - name: Import Developer ID certificate
+        if: env.SIGN_MAC == 'true'
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD=$(uuidgen)
+          echo "$MACOS_CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
+          rm -f "$RUNNER_TEMP/cert.p12"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" > /dev/null
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN" | sed -n 's/.*"\(Developer ID Application: .*\)"/\1/p' | head -n1)
+          test -n "$IDENTITY" || { echo "::error::no Developer ID Application identity in MACOS_CERT_P12"; exit 1; }
+          echo "Signing as: $IDENTITY"
+          echo "SIGN_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
 
       - name: Build screen saver
         run: make
@@ -36,7 +74,8 @@ jobs:
           plutil -lint "$P"
           test "$(plutil -extract CFBundleIdentifier raw "$P")" = com.calebtonn.BibleTime
           test "$(plutil -extract CFBundleShortVersionString raw "$P")" = "$(cat VERSION)"
-          ! grep -q '\$(' "$P"
+          # shellcheck disable=SC2016 # a literal "$(", i.e. an Xcode build variable left unexpanded
+          if grep -qF '$(' "$P"; then echo "::error::unexpanded build variable in Info.plist"; exit 1; fi
           test -f build/BibleTime.saver/Contents/Resources/Translations/kjv.json
 
       - name: SwiftPM core package
@@ -52,24 +91,334 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: renders
+          name: renders-macos
           path: build/renders/
+
+      # The Swift side of the cross-check, compared with the MSVC build's output in the crosscheck-msvc job.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: crosscheck-swift
+          path: build/crosscheck/swift.txt
+          if-no-files-found: error
 
       - name: Package
         run: |
           make dist
           rm -rf build/unzipped && mkdir build/unzipped
-          unzip -q build/BibleTime-*.zip -d build/unzipped
+          unzip -q build/BibleTime-macOS.zip -d build/unzipped
           codesign --verify --deep --strict build/unzipped/BibleTime.saver
+
+      # Apple scans the signed bundle; the ticket is then stapled to it so Gatekeeper accepts it offline, and the
+      # zip is rebuilt around the stapled bundle.
+      - name: Notarize
+        if: env.SIGN_MAC == 'true'
+        timeout-minutes: 30
+        env:
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          set -euo pipefail
+          KEY="$RUNNER_TEMP/AuthKey.p8"
+          printf '%s' "$APPLE_API_KEY" > "$KEY"
+          codesign --verify --strict --verbose=2 build/BibleTime.saver
+          codesign -d --verbose=2 build/BibleTime.saver 2>&1 | grep -E "Authority=Developer ID Application|flags=.*runtime"
+          xcrun notarytool submit build/BibleTime-macOS.zip --key "$KEY" --key-id "$APPLE_API_KEY_ID" \
+              --issuer "$APPLE_API_ISSUER" --wait --timeout 25m --output-format json | tee "$RUNNER_TEMP/notary.json"
+          rm -f "$KEY"
+          grep -q '"status" *: *"Accepted"' "$RUNNER_TEMP/notary.json" || { echo "::error::notarization was not accepted"; exit 1; }
+          xcrun stapler staple build/BibleTime.saver
+          xcrun stapler validate build/BibleTime.saver
+          make dist
+          rm -rf build/unzipped && mkdir build/unzipped
+          unzip -q build/BibleTime-macOS.zip -d build/unzipped
+          xcrun stapler validate build/unzipped/BibleTime.saver
+          codesign --verify --strict build/unzipped/BibleTime.saver
+
+      - name: Remove signing keychain
+        if: always() && env.SIGN_MAC == 'true'
+        run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" || true
 
       - uses: actions/upload-artifact@v4
         with:
-          name: BibleTime.saver
-          path: build/BibleTime-*.zip
+          name: BibleTime-macOS.zip
+          path: build/BibleTime-macOS.zip
+          if-no-files-found: error
 
-      - name: Release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+  windows:
+    name: Windows
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    env:
+      # Git Bash would otherwise rewrite arguments such as "/render" into C:/Program Files/Git/render.
+      MSYS_NO_PATHCONV: "1"
+      MSYS2_ARG_CONV_EXCL: "*"
+      # Azure Artifact Signing runs for release tags and manual runs once the secrets and variables exist (see
+      # CONTRIBUTING.md, "Signing releases"); otherwise the downloads are unsigned as before.
+      SIGN_WINDOWS: ${{ secrets.AZURE_CLIENT_ID != '' && vars.ARTIFACT_SIGNING_ENDPOINT != '' && (startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch') }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -S Windows -B build/windows -A x64
+
+      - name: Build
+        run: cmake --build build/windows --config Release --parallel
+
+      - name: Core tests
+        run: build/windows/bin/core_tests.exe Resources
+
+      - name: Cross-check output (MSVC build)
+        run: build/windows/bin/crosscheck.exe Resources > build/windows/crosscheck-msvc.txt
+
+      - uses: actions/upload-artifact@v4
         with:
-          files: build/BibleTime-*.zip
+          name: crosscheck-msvc
+          path: build/windows/crosscheck-msvc.txt
+          if-no-files-found: error
+
+      - name: Check version info
+        shell: pwsh
+        run: |
+          $want = (Get-Content VERSION -Raw).Trim()
+          $got = (Get-Item build/windows/bin/BibleTime.scr).VersionInfo.ProductVersion
+          Write-Host "BibleTime.scr ProductVersion: $got"
+          if ($got -ne $want) { throw "BibleTime.scr reports version '$got', VERSION says '$want'" }
+
+      # Signed before the screenshots, the installer and the portable zip, so all of them use the signed file.
+      - name: Sign BibleTime.scr
+        if: env.SIGN_WINDOWS == 'true'
+        uses: azure/artifact-signing-action@v2.0.0
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: ${{ vars.ARTIFACT_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ vars.ARTIFACT_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ vars.ARTIFACT_SIGNING_PROFILE }}
+          files: ${{ github.workspace }}\build\windows\bin\BibleTime.scr
+          description: BibleTime
+          description-url: https://github.com/calebtonn/BibleTime
+
+      - name: Check signature
+        if: env.SIGN_WINDOWS == 'true'
+        shell: pwsh
+        run: |
+          $sig = Get-AuthenticodeSignature "build/windows/bin/BibleTime.scr"
+          Write-Host "$($sig.Status): $($sig.SignerCertificate.Subject)"
+          if ($sig.Status -ne 'Valid') { throw "signature is $($sig.Status)" }
+
+      # Same scenes as "make render" on macOS, so the two platforms can be compared side by side.
+      - name: Render screenshots
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          SCR=build/windows/bin/BibleTime.scr
+          OUT=build/windows/renders
+          mkdir -p "$OUT"
+          render() { # render <name> <min bytes> [env assignments...] -- [extra /render args...]
+            local name=$1 min=$2; shift 2
+            local envs=()
+            while [ "$1" != "--" ]; do envs+=("$1"); shift; done; shift
+            echo "::group::$name"
+            env "${envs[@]}" "$SCR" /render "$OUT/$name.png" "$@"
+            check "$OUT/$name.png" "$min"
+            echo "::endgroup::"
+          }
+          check() { # check <png> <min bytes>
+            test -f "$1" || { echo "::error::$1 was not written"; exit 1; }
+            local size; size=$(wc -c < "$1")
+            echo "$1: $size bytes"
+            [ "$size" -ge "$2" ] || { echo "::error::$1 is only $size bytes"; exit 1; }
+          }
+          render clock-paper 10000 BIBLETIME_TIME=15:16 'BIBLETIME_PREFS={"layout":"clock","theme":"paper"}' --
+          render clock-night 10000 BIBLETIME_TIME=21:16 'BIBLETIME_PREFS={"layout":"clock","theme":"night"}' --
+          render centered-paper 10000 BIBLETIME_TIME=15:16 'BIBLETIME_PREFS={"layout":"centered","theme":"paper"}' --
+          render book-night 10000 BIBLETIME_TIME=21:16 'BIBLETIME_PREFS={"layout":"book","theme":"night"}' --
+          render longest-verse 10000 BIBLETIME_TIME=08:09 'BIBLETIME_REF=EST 8:9' 'BIBLETIME_PREFS={"layout":"clock","theme":"paper"}' -- --width 1920 --height 1080
+          render extended-fragment 10000 BIBLETIME_TIME=08:38 'BIBLETIME_REF=ROM 8:38' 'BIBLETIME_PREFS={"layout":"book","theme":"paper","typeface":"charter"}' --
+          render portrait-large 10000 BIBLETIME_TIME=20:12 'BIBLETIME_REF=EST 8:9' 'BIBLETIME_PREFS={"layout":"centered","theme":"night","textScale":2.0}' -- --width 1080 --height 1920
+          render second-display-different 10000 BIBLETIME_TIME=15:16 BIBLETIME_DISPLAY=1 'BIBLETIME_PREFS={"displayMode":"differentVerses"}' --
+          render typeface-sans 10000 BIBLETIME_TIME=15:16 'BIBLETIME_PREFS={"layout":"centered","theme":"paper","typeface":"sans"}' --
+          render preview 2000 BIBLETIME_TIME=15:16 'BIBLETIME_PREFS={"layout":"clock","theme":"paper"}' -- --width 296 --height 184 --preview
+          echo "::group::options"
+          "$SCR" /render-options "$OUT/options.png"
+          check "$OUT/options.png" 5000
+          echo "::endgroup::"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: renders-windows
+          path: build/windows/renders/
+
+      - name: Build installer
+        run: |
+          set -euo pipefail
+          ISCC="/c/Program Files (x86)/Inno Setup 6/ISCC.exe"
+          # The image usually has Inno Setup; install or upgrade it when it is missing or older than 6.3.
+          have=""
+          if [ -f "$ISCC" ]; then
+            have=$(powershell -NoProfile -Command "(Get-Item '$(cygpath -w "$ISCC")').VersionInfo.ProductVersion" | tr -d '\r ')
+          fi
+          echo "Inno Setup on the image: ${have:-none}"
+          if [ -z "$have" ] || [ "$(printf '%s\n' 6.3 "$have" | sort -V | head -n1)" != 6.3 ]; then
+            choco upgrade innosetup -y --no-progress
+          fi
+          "$ISCC" /Qp "/DAppVersion=$(tr -d '[:space:]' < VERSION)" \
+              "/DSourceScr=$(cygpath -w "$PWD/build/windows/bin/BibleTime.scr")" \
+              "/O$(cygpath -w "$PWD/build/windows/installer")" \
+              Windows/installer/BibleTime.iss
+          ls -l build/windows/installer/BibleTime-Windows-Setup.exe
+
+      # The setup program itself. (Inno's generated uninstaller stays unsigned: signing it needs Inno's SignTool
+      # integration with a local signtool, which Artifact Signing only offers through extra client tools.)
+      - name: Sign installer
+        if: env.SIGN_WINDOWS == 'true'
+        uses: azure/artifact-signing-action@v2.0.0
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: ${{ vars.ARTIFACT_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ vars.ARTIFACT_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ vars.ARTIFACT_SIGNING_PROFILE }}
+          files: ${{ github.workspace }}\build\windows\installer\BibleTime-Windows-Setup.exe
+          description: BibleTime
+          description-url: https://github.com/calebtonn/BibleTime
+
+      - name: Check signature
+        if: env.SIGN_WINDOWS == 'true'
+        shell: pwsh
+        run: |
+          $sig = Get-AuthenticodeSignature "build/windows/installer/BibleTime-Windows-Setup.exe"
+          Write-Host "$($sig.Status): $($sig.SignerCertificate.Subject)"
+          if ($sig.Status -ne 'Valid') { throw "signature is $($sig.Status)" }
+
+      # Install silently, check the saver landed in System32 and was chosen for this user, then uninstall and
+      # check both are undone. (The runner's account is an administrator, so no UAC prompt appears.)
+      - name: Test installer
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          SYS_SCR=/c/Windows/System32/BibleTime.scr
+          chosen() { reg query 'HKCU\Control Panel\Desktop' /v SCRNSAVE.EXE 2>/dev/null | grep -i 'BibleTime.scr' || true; }
+          wait_for() { # wait_for <description> <command...>: poll for up to 60 s
+            local what=$1; shift
+            for _ in $(seq 60); do "$@" && return 0; sleep 1; done
+            echo "::error::timed out waiting for: $what"; exit 1
+          }
+          build/windows/installer/BibleTime-Windows-Setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG=build/windows/installer/install.log
+          wait_for "BibleTime.scr in System32" test -f "$SYS_SCR"
+          wait_for "BibleTime chosen as screen saver" sh -c "reg query 'HKCU\Control Panel\Desktop' /v SCRNSAVE.EXE | grep -qi BibleTime.scr"
+          echo "installed: $(chosen)"
+          UNINS="/c/Program Files/BibleTime/unins000.exe"
+          test -f "$UNINS"
+          "$UNINS" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
+          wait_for "BibleTime.scr removed" sh -c "! test -f '$SYS_SCR'"
+          wait_for "screen saver choice cleared" sh -c "! reg query 'HKCU\Control Panel\Desktop' /v SCRNSAVE.EXE 2>/dev/null | grep -qi BibleTime.scr"
+          echo "uninstalled cleanly"
+
+      - name: Build portable zip
+        shell: pwsh
+        run: |
+          $dir = "build/windows/portable"
+          New-Item -ItemType Directory -Force $dir | Out-Null
+          Copy-Item build/windows/bin/BibleTime.scr $dir/
+          # Windows line endings so Notepad on older Windows 10 shows the text properly, whatever git did on checkout.
+          $text = [IO.File]::ReadAllText("Windows/installer/How to install.txt") -replace "`r?`n", "`r`n"
+          [IO.File]::WriteAllText("$dir/How to install.txt", $text)
+          Compress-Archive -Path "$dir/*" -DestinationPath build/windows/BibleTime-Windows-Portable.zip -Force
+          Get-Item build/windows/BibleTime-Windows-Portable.zip | Format-List Name, Length
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: installer-log
+          path: build/windows/installer/install.log
+          if-no-files-found: ignore
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BibleTime-Windows-Setup.exe
+          path: build/windows/installer/BibleTime-Windows-Setup.exe
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BibleTime-Windows-Portable.zip
+          path: build/windows/BibleTime-Windows-Portable.zip
+          if-no-files-found: error
+
+  # The MSVC-compiled core must choose exactly the verses the Swift core chooses ("make crosscheck" already checks
+  # clang on macOS; this catches compiler or standard-library differences on Windows).
+  crosscheck-msvc:
+    name: Cross-check MSVC vs Swift
+    needs: [macos, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: crosscheck-*
+          path: crosscheck
+          merge-multiple: true
+      - name: Compare
+        run: |
+          tr -d '\r' < crosscheck/crosscheck-msvc.txt > msvc.txt
+          tr -d '\r' < crosscheck/swift.txt > swift.txt
+          if cmp -s swift.txt msvc.txt; then
+            echo "Swift and MSVC agree ($(wc -l < swift.txt) lines)"
+          else
+            echo "::error::Swift and MSVC cross-check outputs differ (< swift, > msvc)"
+            diff swift.txt msvc.txt | head -50
+            exit 1
+          fi
+
+  release:
+    name: Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [macos, windows, crosscheck-msvc]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tag matches VERSION
+        run: |
+          test "${GITHUB_REF_NAME#v}" = "$(tr -d '[:space:]' < VERSION)" || {
+            echo "::error::tag $GITHUB_REF_NAME does not match VERSION $(cat VERSION)"; exit 1; }
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: BibleTime-*
+          path: dist
+          merge-multiple: true
+
+      - name: Check downloads
+        run: |
+          ls -l dist
+          test -s dist/BibleTime-macOS.zip
+          test -s dist/BibleTime-Windows-Setup.exe
+          test -s dist/BibleTime-Windows-Portable.zip
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/BibleTime-Windows-Setup.exe
+            dist/BibleTime-Windows-Portable.zip
+            dist/BibleTime-macOS.zip
           generate_release_notes: true
+          body: |
+            ## Which file do I download?
+
+            | Your computer | Download |
+            | --- | --- |
+            | **Windows 10 or 11** | **BibleTime-Windows-Setup.exe**, then double-click it |
+            | Windows, without administrator rights (work or school PC) | BibleTime-Windows-Portable.zip |
+            | **Mac** (macOS 12 or later) | **BibleTime-macOS.zip** |
+
+            Step-by-step instructions, including what to click when Windows or macOS warns about an app from the
+            internet, are in the [README](https://github.com/calebtonn/BibleTime#download).
