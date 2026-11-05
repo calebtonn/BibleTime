@@ -154,6 +154,20 @@ do {
 // MARK: - (b) Day ordinals (Foundation's Gregorian calendar, UTC, at noon)
 
 do {
+    // Diagnostic only (stderr, not compared): how Foundation's ordinality depends on the hour and the time zone.
+    for zone in ["UTC", "America/Chicago", "America/Los_Angeles", "Europe/Berlin", "Asia/Tokyo", "Pacific/Kiritimati"] {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: zone)!
+        var line = "probe \(zone):"
+        for (y, m, d) in [(1600, 1, 1), (1970, 1, 1), (2026, 11, 3)] {
+            for h in [0, 6, 12, 23] {
+                if let date = cal.date(from: DateComponents(year: y, month: m, day: d, hour: h)) {
+                    line += " \(dateString(y, m, d))T\(h)=\(cal.ordinality(of: .day, in: .era, for: date).map(String.init) ?? "nil")"
+                }
+            }
+        }
+        FileHandle.standardError.write(Data((line + "\n").utf8))
+    }
     emit("## day ordinals")
     var dates: [(Int, Int, Int)] = []
     var z = daysFromCivil(1600, 1, 1)
