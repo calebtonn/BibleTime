@@ -91,9 +91,11 @@ Source: "{#SourceScr}"; DestDir: "{sys}"; DestName: "BibleTime.scr"; Flags: igno
 [Run]
 ; Both run as the user who started Setup (not the elevated administrator account), because the screen saver choice
 ; lives in that user's registry (HKCU\Control Panel\Desktop). /setactive runs first and is waited for, so Screen
-; Saver Settings opens with BibleTime already selected.
+; Saver Settings opens with BibleTime already selected. A silent upgrade (winget, IT deployment) skips /setactive so
+; it never overrides a screen saver the user picked after installing BibleTime; a silent first install still sets it.
 Filename: "{sys}\BibleTime.scr"; Parameters: "/setactive"; Description: "Use BibleTime as my screen saver"; \
-    StatusMsg: "Choosing BibleTime as your screen saver..."; Flags: postinstall runasoriginaluser runhidden
+    StatusMsg: "Choosing BibleTime as your screen saver..."; Flags: postinstall runasoriginaluser runhidden; \
+    Check: ShouldSetActive
 Filename: "{sys}\control.exe"; Parameters: "desk.cpl,,@screensaver"; Description: "Open Screen Saver Settings"; \
     Flags: postinstall runasoriginaluser nowait skipifsilent
 
@@ -112,6 +114,22 @@ var
   ResultCode: Integer;
 begin
   Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM BibleTime.scr', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+end;
+
+var
+  WasInstalled: Boolean;
+
+{ True when an earlier BibleTime is installed (its uninstall entry exists), recorded before this setup writes its own. }
+function InitializeSetup(): Boolean;
+begin
+  WasInstalled := RegKeyExists(HKLM64, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{C27634AB-908F-4E39-8EA6-8B846FDCC1C6}_is1')
+    or RegKeyExists(HKLM32, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{C27634AB-908F-4E39-8EA6-8B846FDCC1C6}_is1');
+  Result := True;
+end;
+
+function ShouldSetActive(): Boolean;
+begin
+  Result := not (WizardSilent and WasInstalled);
 end;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;

@@ -64,14 +64,35 @@ double monotonicSeconds() {
 
 // MARK: - Time and locale
 
-ClockTime localClockTime() {
-    SYSTEMTIME st;
-    GetLocalTime(&st);
+namespace {
+/// Hour and minute from the local time; the day ordinal from the same instant's UTC date, because the Mac's
+/// Foundation counts days in UTC (the daily rotation turns over at 00:00 UTC on both platforms).
+ClockTime clockTime(const SYSTEMTIME& local, const SYSTEMTIME& utc) {
     ClockTime t;
-    t.hour = st.wHour;
-    t.minute = st.wMinute;
-    t.dayOrdinal = ClockTime::dayOrdinalFor(st.wYear, st.wMonth, st.wDay);
+    t.hour = local.wHour;
+    t.minute = local.wMinute;
+    t.dayOrdinal = ClockTime::dayOrdinalFor(utc.wYear, utc.wMonth, utc.wDay);
     return t;
+}
+}  // namespace
+
+ClockTime localClockTime() {
+    SYSTEMTIME utc, local;
+    GetSystemTime(&utc);
+    if (!SystemTimeToTzSpecificLocalTime(nullptr, &utc, &local)) GetLocalTime(&local);
+    return clockTime(local, utc);
+}
+
+ClockTime localClockTimeToday(int hour, int minute) {
+    SYSTEMTIME local;
+    GetLocalTime(&local);
+    local.wHour = static_cast<WORD>(hour);
+    local.wMinute = static_cast<WORD>(minute);
+    local.wSecond = 0;
+    local.wMilliseconds = 0;
+    SYSTEMTIME utc;
+    if (!TzSpecificLocalTimeToSystemTime(nullptr, &local, &utc)) utc = local;
+    return clockTime(local, utc);
 }
 
 namespace {
@@ -114,10 +135,7 @@ std::optional<ClockTime> pinnedTime() {
     char extra = 0;
     if (v.empty() || std::sscanf(v.c_str(), "%d:%d%c", &h, &m, &extra) != 2) return std::nullopt;
     if (h < 0 || h > 23 || m < 0 || m > 59) return std::nullopt;
-    ClockTime t = localClockTime();  // today, at the pinned time
-    t.hour = h;
-    t.minute = m;
-    return t;
+    return localClockTimeToday(h, m);  // today, at the pinned time
 }
 
 std::optional<int> pinnedDisplayIndex() {
@@ -147,10 +165,7 @@ ClockTime now() {
     static const std::optional<ClockTime> pinned = dev::pinnedTime();
     if (pinned) {
         // Keep the pinned hour and minute but today's date (re-read so a run across midnight stays correct).
-        ClockTime t = localClockTime();
-        t.hour = pinned->hour;
-        t.minute = pinned->minute;
-        return t;
+        return localClockTimeToday(pinned->hour, pinned->minute);
     }
     return localClockTime();
 }

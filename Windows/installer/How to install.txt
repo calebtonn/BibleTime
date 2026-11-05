@@ -25,6 +25,9 @@ How to install
 4. If Windows says "Windows protected your PC", click "More info" and then
    "Run anyway". This appears because BibleTime is a free project and is not
    signed with a paid certificate. It is safe to continue.
+   If it says "Smart App Control blocked an app that may be unsafe" instead,
+   there is no way to allow it on that PC: Smart App Control only runs
+   signed apps.
 
 5. The Screen Saver Settings window opens with BibleTime selected.
    Click "Settings..." to choose the look, the translation and more,

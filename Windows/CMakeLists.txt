@@ -4,7 +4,7 @@
 #     cmake -S Windows -B build/windows -A x64
 #     cmake --build build/windows --config Release
 #   Cross-compile from Linux/macOS (mingw-w64):
-#     cmake -S Windows -B build/windows-mingw -DCMAKE_TOOLCHAIN_FILE=Windows/cmake/mingw-w64.cmake -DCMAKE_BUILD_TYPE=Release
+#     cmake -S Windows -B build/windows-mingw -DCMAKE_TOOLCHAIN_FILE="$PWD/Windows/cmake/mingw-w64.cmake" -DCMAKE_BUILD_TYPE=Release
 #     cmake --build build/windows-mingw
 #   Core tests only, on any OS with a C++17 compiler:
 #     cmake -S Windows -B build/core && cmake --build build/core && build/core/bin/core_tests Resources

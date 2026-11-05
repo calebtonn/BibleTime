@@ -576,17 +576,21 @@ int main(int argc, char** argv) {
     }
 
     section("day ordinal");
-    // Foundation's values (see dayOrdinalFor): Julian day number - 1721424, Julian calendar before 1582-10-15.
-    check(ClockTime::dayOrdinalFor(1970, 1, 1) == 719164, "1970-01-01 is 719164");
-    check(ClockTime::dayOrdinalFor(2026, 11, 3) == 739924, "2026-11-03 is 739924");
-    check(ClockTime::dayOrdinalFor(2026, 11, 5) == 739926, "2026-11-05 is 739926");
-    check(ClockTime::dayOrdinalFor(2000, 2, 29) == 730180, "2000-02-29 is 730180");
-    check(ClockTime::dayOrdinalFor(2000, 3, 1) == 730181, "2000-03-01 follows the leap day");
+    // Foundation's values (see dayOrdinalFor): Julian day number - 1721425 (UTC days), Julian calendar before 1582-10-15.
+    check(ClockTime::dayOrdinalFor(1970, 1, 1) == 719163, "1970-01-01 is 719163");
+    check(ClockTime::dayOrdinalFor(2026, 11, 3) == 739923, "2026-11-03 is 739923");
+    check(ClockTime::dayOrdinalFor(2026, 11, 5) == 739925, "2026-11-05 is 739925");
+    check(ClockTime::dayOrdinalFor(2000, 2, 29) == 730179, "2000-02-29 is 730179");
+    check(ClockTime::dayOrdinalFor(2000, 3, 1) == 730180, "2000-03-01 follows the leap day");
     check(ClockTime::dayOrdinalFor(1900, 3, 1) - ClockTime::dayOrdinalFor(1900, 2, 28) == 1, "1900 is not a leap year");
-    check(ClockTime::dayOrdinalFor(2200, 12, 31) == 803534, "2200-12-31 is 803534");
-    check(ClockTime::dayOrdinalFor(1582, 10, 15) == 577737, "Gregorian reform day 1582-10-15 is 577737");
-    check(ClockTime::dayOrdinalFor(1582, 10, 4) == 577736, "1582-10-04 (Julian) is the day before the reform");
-    check(ClockTime::dayOrdinalFor(1, 1, 1) == 0, "0001-01-01 (Julian) is 0");
+    check(ClockTime::dayOrdinalFor(2200, 12, 31) == 803533, "2200-12-31 is 803533");
+    check(ClockTime::dayOrdinalFor(1582, 10, 15) == 577736, "Gregorian reform day 1582-10-15 is 577736");
+    check(ClockTime::dayOrdinalFor(1582, 10, 4) == 577735, "1582-10-04 (Julian) is the day before the reform");
+    check(ClockTime::dayOrdinalFor(1, 1, 1) == -1, "0001-01-01 (Julian) is -1");
+    check(ClockTime::dayOrdinalForUnixTime(0) == 719163, "the Unix epoch is 719163");
+    check(ClockTime::dayOrdinalForUnixTime(86399) == 719163 && ClockTime::dayOrdinalForUnixTime(86400) == 719164, "turns over at 00:00 UTC");
+    check(ClockTime::dayOrdinalForUnixTime(-1) == 719162, "one second before the epoch is the previous day");
+    check(ClockTime::dayOrdinalForUnixTime(1793664000) == ClockTime::dayOrdinalFor(2026, 11, 3), "2026-11-03T00:00Z");
     check(ClockTime::dayOrdinalFor(1500, 3, 1) - ClockTime::dayOrdinalFor(1500, 2, 28) == 2, "1500 is a Julian leap year");
     {
         bool consecutive = true;

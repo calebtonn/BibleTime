@@ -135,7 +135,7 @@ build\windows\bin\core_tests.exe Resources
 Or cross-compile on Linux or macOS with mingw-w64 (`apt install mingw-w64`, `brew install mingw-w64`):
 
 ```bash
-cmake -S Windows -B build/windows-mingw -DCMAKE_TOOLCHAIN_FILE=Windows/cmake/mingw-w64.cmake -DCMAKE_BUILD_TYPE=Release
+cmake -S Windows -B build/windows-mingw -DCMAKE_TOOLCHAIN_FILE="$PWD/Windows/cmake/mingw-w64.cmake" -DCMAKE_BUILD_TYPE=Release
 cmake --build build/windows-mingw
 ```
 

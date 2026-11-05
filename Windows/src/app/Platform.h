@@ -12,6 +12,8 @@ namespace bt::app {
 
 /// Local wall-clock time as the core expects it.
 ClockTime localClockTime();
+/// Today's local date at the given hour and minute (for BIBLETIME_TIME).
+ClockTime localClockTimeToday(int hour, int minute);
 
 /// LOCALE_STIMEFORMAT contains 'H' -> 24-hour; AM/PM symbols from LOCALE_S1159 / LOCALE_S2359 (default "AM"/"PM").
 LocaleInfo userLocale();

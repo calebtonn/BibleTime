@@ -319,9 +319,12 @@ struct ClockTime {
     int hour12() const { return hour % 12 == 0 ? 12 : hour % 12; }
     int minuteKey() const { return hour * 60 + minute; }
 
-    /// Ordinal for a local civil date, equal to Foundation's: its Gregorian calendar switches from Julian on
-    /// 1582-10-15, and the value is julianDayNumber(y, m, d) - 1721424 (1970-01-01 -> 719164, 2026-11-03 -> 739924).
+    /// Ordinal for a UTC civil date, equal to Foundation's Calendar(.gregorian).ordinality(of: .day, in: .era), which on
+    /// macOS counts UTC days of the instant regardless of the calendar's time zone. So the daily rotation turns over at
+    /// 00:00 UTC on both platforms. julianDayNumber(y, m, d) - 1721425 (1970-01-01 -> 719163, 2026-11-03 -> 739923).
     static int64_t dayOrdinalFor(int year, int month, int day);
+    /// The ordinal for an instant: floor(seconds / 86400) + 719163.
+    static int64_t dayOrdinalForUnixTime(int64_t secondsSince1970);
 };
 
 /// SplitMix64, seeded exactly like the Swift SeededGenerator.

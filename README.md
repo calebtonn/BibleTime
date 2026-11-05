@@ -23,11 +23,16 @@ All versions and release notes are on the [Releases page](https://github.com/cal
 
 ## Install on Windows
 
-1. Click [**Download for Windows**](https://github.com/calebtonn/BibleTime/releases/latest/download/BibleTime-Windows-Setup.exe)
-   and open the downloaded file, `BibleTime-Windows-Setup.exe`.
+1. Click [**Download for Windows**](https://github.com/calebtonn/BibleTime/releases/latest/download/BibleTime-Windows-Setup.exe).
+   If your browser says the file *isn't commonly downloaded*, keep it: in Edge, point at the download, click
+   **…** › **Keep**, then **Show more** › **Keep anyway**. Then open `BibleTime-Windows-Setup.exe`.
 2. Windows may show a blue box saying **"Windows protected your PC"**. Click **More info**, then **Run anyway**.
-   This appears because BibleTime is a free project that isn't signed with a paid certificate, not because
-   anything is wrong with it.
+   These warnings appear because BibleTime is a free project that isn't signed with a paid certificate, not
+   because anything is wrong with it.
+
+   If instead you see **"Smart App Control blocked an app that may be unsafe"**, there is no way to allow it:
+   Smart App Control (on some new Windows 11 PCs) only runs signed apps, so BibleTime can't be installed on
+   that PC for now.
 3. Click **Yes** when Windows asks whether to allow the app to make changes, then click **Install**.
 4. On the last page, leave both boxes ticked and click **Finish**. BibleTime becomes your screen saver and the
    **Screen Saver Settings** window opens so you can see it.
@@ -47,7 +52,8 @@ That's it. To change how it looks (translation, layout, colours, typeface, text 
 2. Right-click the zip file, choose **Extract All…**, then **Extract**.
 3. Move `BibleTime.scr` to a folder where it can stay (your Documents folder, for example).
 4. Right-click `BibleTime.scr` and choose **Install** (on Windows 11 you may need **Show more options** first).
-   If you see "Windows protected your PC", click **More info**, then **Run anyway**.
+   If you see "Windows protected your PC", click **More info**, then **Run anyway** (see step 2 above if Smart
+   App Control blocks it).
 5. The Screen Saver Settings window opens with BibleTime selected. Click **Settings…** to adjust it, then **OK**.
 
 To remove it, choose another screen saver (or "(None)") in Screen Saver Settings and delete `BibleTime.scr`.
@@ -58,8 +64,10 @@ To remove it, choose another screen saver (or "(None)") in Screen Saver Settings
    Safari unzips it for you; otherwise double-click `BibleTime-macOS.zip` to get `BibleTime.saver`.
 2. BibleTime isn't notarized by Apple (that needs a paid Apple developer account), so the first time macOS will
    refuse to open it. Either:
-   - double-click `BibleTime.saver`, click **Done** on the warning, then open **System Settings ›
-     Privacy & Security**, scroll down and click **Open Anyway**; or
+   - double-click `BibleTime.saver` and close the warning (**Done** or **OK**). Then open **System Settings ›
+     Privacy & Security** (on macOS 12 and 13: **System Preferences › Security & Privacy › General**), scroll
+     down and click **Open Anyway**. On macOS 12–14 you can instead Control-click `BibleTime.saver`, choose
+     **Open**, and confirm; or
    - remove the quarantine flag in Terminal, then double-click the bundle:
      ```bash
      xattr -dr com.apple.quarantine ~/Downloads/BibleTime.saver
@@ -74,8 +82,8 @@ open the **Go** menu to see **Library**).
 
 ## Requirements
 
-- **Windows:** Windows 10 or Windows 11, 64-bit. Windows on ARM PCs run it through Windows' built-in x64
-  emulation. Nothing else to install.
+- **Windows:** Windows 10 or Windows 11, 64-bit. Windows 11 on ARM PCs (Snapdragon, Surface Pro X) run it
+  through Windows' built-in x64 emulation; Windows 10 on ARM is not supported. Nothing else to install.
 - **Mac:** macOS 12 Monterey or later, Apple silicon or Intel.
 
 ## Features
@@ -84,8 +92,8 @@ open the **Go** menu to see **Library**).
   American Standard Version. You can [add others](#other-translations-esv-csb-lsb-niv-) you own.
 - **Well-known verses first.** When a famous verse matches the minute (John 3:16, Philippians 4:13,
   Hebrews 11:1, Proverbs 3:5, Romans 8:28, Matthew 6:33 ...) it takes priority. Otherwise a verse is drawn
-  from every book that has that chapter and verse, rotating daily so every computer, Mac or PC, shows the same
-  verse at the same minute.
+  from every book that has that chapter and verse, rotating daily (at midnight UTC) so every computer, Mac or PC,
+  shows the same verse at the same minute.
 - **Whole thoughts.** A verse that ends mid-sentence is extended with the next verse
   ("Romans 08:38–39") so what you read makes sense on its own. Genealogies, name lists and census tables
   are never shown.
@@ -234,7 +242,7 @@ The screen saver is `build\windows\bin\BibleTime.scr`: right-click it and choose
 You can also cross-compile from Linux or macOS with mingw-w64:
 
 ```bash
-cmake -S Windows -B build/windows-mingw -DCMAKE_TOOLCHAIN_FILE=Windows/cmake/mingw-w64.cmake -DCMAKE_BUILD_TYPE=Release
+cmake -S Windows -B build/windows-mingw -DCMAKE_TOOLCHAIN_FILE="$PWD/Windows/cmake/mingw-w64.cmake" -DCMAKE_BUILD_TYPE=Release
 cmake --build build/windows-mingw
 ```
 

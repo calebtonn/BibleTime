@@ -111,14 +111,19 @@ int64_t julianDayNumber(int64_t year, int64_t month, int64_t day, bool julian) {
 }  // namespace
 
 int64_t ClockTime::dayOrdinalFor(int year, int month, int day) {
-    // Foundation's Gregorian calendar is Julian before 1582-10-15. Its ordinality(of: .day, in: .era) is the
-    // Julian day number minus 1721424 (so 0001-01-01 Julian is 0 and 1970-01-01 is 719164). The offset is pinned by
-    // the Mac's own output: the Swift tests expect John 3:16 at 3:16 PM on 2026-11-03 (ordinal 739924, not 739925),
-    // and the committed docs/book-night.png shows Mark 9:16, which only ordinal 739924 produces that week.
-    // Tests/CrossCheck compares this function with Foundation over 2000 dates in CI.
+    // Foundation's Gregorian calendar is Julian before 1582-10-15, and on macOS its ordinality(of: .day, in: .era)
+    // counts whole days of the instant in UTC, whatever time zone the calendar is set to (measured in CI across six
+    // zones: the value turns over at 00:00 UTC). For a UTC civil date that is julianDayNumber(y, m, d) - 1721425:
+    // 1970-01-01 -> 719163, 2026-11-03 -> 739923. Callers pass the UTC date of the moment (see dayOrdinalForUnixTime),
+    // not the local date. Tests/CrossCheck compares this function with Foundation over 2000 dates in CI.
     // Dates in the nonexistent 1582-10-05...14 gap are read as Julian.
     const bool gregorian = year > 1582 || (year == 1582 && (month > 10 || (month == 10 && day >= 15)));
-    return julianDayNumber(year, month, day, !gregorian) - 1721424;
+    return julianDayNumber(year, month, day, !gregorian) - 1721425;
+}
+
+int64_t ClockTime::dayOrdinalForUnixTime(int64_t secondsSince1970) {
+    const int64_t days = secondsSince1970 >= 0 ? secondsSince1970 / 86400 : -((-secondsSince1970 + 86399) / 86400);
+    return days + 719163;
 }
 
 // MARK: - SeededGenerator
