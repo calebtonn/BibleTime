@@ -306,5 +306,43 @@ do {
     }
 }
 
+// MARK: - (g) Character counts (String.count) of non-Latin samples: imported translations in other scripts
+
+do {
+    emit("## character samples")
+    let samples: [(String, String)] = [
+        ("tamil-verse", "தேவன் உலகத்தில் அன்புகூர்ந்தார்,"),
+        ("tamil-word", "பைபிள்"),
+        ("hindi-word", "हिन्दी"),
+        ("hindi-conjunct", "क्षत्रिय"),
+        ("hindi-verse", "क्योंकि परमेश्वर ने जगत से ऐसा प्रेम रखा"),
+        ("bengali", "ঈশ্বর জগৎকে এত প্রেম করিলেন"),
+        ("malayalam", "ദൈവം ലോകത്തെ സ്നേഹിച്ചു"),
+        ("telugu", "దేవుడు లోకమును ప్రేమించెను"),
+        ("thai-verse", "พระเจ้าทรงรักโลก"),
+        ("thai-am", "กำลังน้ำ"),
+        ("amharic", "እግዚአብሔር ዓለሙን"),
+        ("korean-verse", "하나님이 세상을 이처럼 사랑하사"),
+        ("korean-jamo", "\u{1100}\u{1161}\u{11A8}\u{1100}\u{1161}"),
+        ("korean-jamo-mixed", "\u{1100}\u{1100}\u{1161}가\u{11A8}각\u{1161}"),
+        ("chinese", "神爱世人，甚至将他的独生子赐给他们"),
+        ("arabic-verse", "لأَنَّهُ هكَذَا أَحَبَّ اللهُ الْعَالَمَ"),
+        ("arabic-prepend", "\u{600}١٢ \u{6DD}٣"),
+        ("hebrew-points", "כִּי־כֵן אָהַב אֱלֹהִים אֶת־הָעוֹלָם"),
+        ("greek-polytonic", "Οὕτως γὰρ ἠγάπησεν ὁ θεὸς τὸν κόσμον"),
+        ("combining-stack", "e\u{301}\u{302}o\u{308}\u{323} a\u{20DD}"),
+        ("crlf", "a\r\nb\r\n\n\rc\r\u{301}"),
+        ("emoji-family", "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}\u{200D}\u{1F466}"),
+        ("emoji-skin", "\u{1F44D}\u{1F3FD}\u{1F44D} \u{1F9D1}\u{1F3FE}\u{200D}\u{1F91D}\u{200D}\u{1F9D1}\u{1F3FB}"),
+        ("emoji-rainbow-vs16", "\u{1F3F3}\u{FE0F}\u{200D}\u{1F308} \u{2764}\u{FE0F} 1\u{FE0F}\u{20E3}"),
+        ("flags", "\u{1F1FA}\u{1F1F8}\u{1F1EC}\u{1F1E7}\u{1F1E9}"),
+        ("flag-tags", "\u{1F3F4}\u{E0067}\u{E0062}\u{E0073}\u{E0063}\u{E0074}\u{E007F}"),
+        ("zwj-after-letter", "a\u{200D}\u{1F44D} \u{200D}\u{200D}"),
+    ]
+    for (label, sample) in samples {
+        emit("\(label) \(sample.count) \(sample.unicodeScalars.count)")
+    }
+}
+
 emit("# end")
 flush()

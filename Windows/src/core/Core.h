@@ -95,8 +95,7 @@ struct Verse {
     bool endsMidSentence() const;
 };
 
-/// Number of user-perceived characters, matching Swift's String.count for the texts BibleTime ships
-/// (Unicode scalars, not counting combining marks, variation selectors or ZWJ continuations; CR LF counts once).
+/// Number of user-perceived characters (UAX #29 extended grapheme clusters), equal to Swift's String.count.
 size_t characterCount(std::string_view utf8);
 
 class Translation {
@@ -147,7 +146,7 @@ struct TranslationInfo {
 struct TranslationHeader {
     std::string id, name, abbreviation;
     bool operator==(const TranslationHeader& o) const { return id == o.id && name == o.name && abbreviation == o.abbreviation; }
-    /// Trim ASCII whitespace and lowercase.
+    /// Swift's id.trimmingCharacters(in: .whitespaces).lowercased(): trim tab and Zs, full Unicode lowercasing.
     static std::string normalizeID(std::string_view id);
     /// Fast path reads the first 4 KB and cuts at "verses"; otherwise parses the whole file.
     /// Throws ImportError(invalidFormat) when id, name or abbreviation is missing.
@@ -162,6 +161,14 @@ using ResourceLoader = std::function<std::optional<std::string>(const std::strin
 /// A loader that reads files under `directory`.
 ResourceLoader directoryLoader(std::filesystem::path directory);
 
+/// Orders imported translations by name: negative, zero or positive, like Swift's localizedCaseInsensitiveCompare.
+using NameComparator = std::function<int(const std::string& a, const std::string& b)>;
+/// Install the platform's locale-aware comparison (the Windows app uses CompareStringEx). Call once at startup,
+/// before any catalog scans; an empty function restores the default.
+void setNameComparator(NameComparator comparator);
+/// The installed comparator, or by default Unicode lowercasing then scalar order (locale-independent).
+int compareNames(const std::string& a, const std::string& b);
+
 class TranslationCatalog {
 public:
     struct BundledEntry { const char* id; const char* name; const char* abbreviation; };
@@ -171,7 +178,7 @@ public:
 
     TranslationCatalog(const Canon& canon, ResourceLoader loader, std::vector<std::filesystem::path> importDirectories);
 
-    /// Bundled first (those the loader has), then imported sorted by name (case-insensitive).
+    /// Bundled first (those the loader has), then imported stably sorted by name with compareNames.
     std::vector<TranslationInfo> available() const;
     std::optional<TranslationInfo> info(std::string_view id) const;
     const std::vector<std::filesystem::path>& importDirectories() const { return importDirectories_; }
@@ -211,6 +218,8 @@ public:
     const std::filesystem::path& destination() const { return destination_; }
     /// Parse and sanity-check (id charset, name/abbreviation, not bundled, >= 5000 verses, known books).
     std::pair<TranslationHeader, size_t> validate(std::string_view data) const;
+    /// Swift: non-empty and every Character isLetter || isNumber || "-" || "_".
+    static bool isValidID(std::string_view id);
     /// Validate and copy to destination/<id>.json (via a .<id>.json.part temp file), replacing any previous import.
     TranslationInfo importFile(const std::filesystem::path& source) const;
     /// Delete an imported file; bundled entries are never touched.

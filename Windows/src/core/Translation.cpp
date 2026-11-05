@@ -7,6 +7,7 @@
 
 #include "Core.h"
 #include "JsonReader.h"
+#include "Unicode.h"
 
 namespace bt {
 
@@ -14,89 +15,14 @@ namespace fs = std::filesystem;
 
 // MARK: - Unicode helpers
 
-namespace {
-
-/// Decode one scalar from well-formed UTF-8 (the JSON reader validated it). Advances `i`.
-/// Malformed bytes decode as U+FFFD one byte at a time so counting never stalls.
-uint32_t decodeScalar(std::string_view s, size_t& i) {
-    const auto c = static_cast<unsigned char>(s[i]);
-    size_t n = 1;
-    uint32_t scalar = c;
-    if (c >= 0xF0) {
-        n = 4;
-        scalar = c & 0x07;
-    } else if (c >= 0xE0) {
-        n = 3;
-        scalar = c & 0x0F;
-    } else if (c >= 0xC0) {
-        n = 2;
-        scalar = c & 0x1F;
-    } else if (c >= 0x80) {
-        ++i;
-        return 0xFFFD;
-    }
-    if (i + n > s.size()) {
-        ++i;
-        return 0xFFFD;
-    }
-    for (size_t k = 1; k < n; ++k) {
-        const auto b = static_cast<unsigned char>(s[i + k]);
-        if ((b & 0xC0) != 0x80) {
-            ++i;
-            return 0xFFFD;
-        }
-        scalar = (scalar << 6) | (b & 0x3F);
-    }
-    i += n;
-    return scalar;
-}
-
-/// Scalars that never start a new user-perceived character (grapheme cluster "Extend" and friends): combining
-/// marks of the scripts Bible translations commonly use, variation selectors, emoji modifiers and tags.
-bool isExtend(uint32_t u) {
-    return (u >= 0x0300 && u <= 0x036F) ||   // combining diacritical marks
-           (u >= 0x0483 && u <= 0x0489) ||   // Cyrillic
-           (u >= 0x0591 && u <= 0x05BD) || u == 0x05BF || u == 0x05C1 || u == 0x05C2 || u == 0x05C4 ||
-           u == 0x05C5 || u == 0x05C7 ||     // Hebrew points and accents
-           (u >= 0x0610 && u <= 0x061A) || (u >= 0x064B && u <= 0x065F) || u == 0x0670 ||
-           (u >= 0x06D6 && u <= 0x06DC) || (u >= 0x06DF && u <= 0x06E4) || u == 0x06E7 || u == 0x06E8 ||
-           (u >= 0x06EA && u <= 0x06ED) ||   // Arabic
-           (u >= 0x0900 && u <= 0x0903) || (u >= 0x093A && u <= 0x094F && u != 0x093D) ||
-           (u >= 0x0951 && u <= 0x0957) || u == 0x0962 || u == 0x0963 ||  // Devanagari signs and vowel signs
-           (u >= 0x1AB0 && u <= 0x1AFF) || (u >= 0x1DC0 && u <= 0x1DFF) ||
-           u == 0x200C ||                    // zero width non-joiner
-           (u >= 0x20D0 && u <= 0x20FF) ||   // combining marks for symbols
-           (u >= 0x302A && u <= 0x302F) || u == 0x3099 || u == 0x309A ||
-           (u >= 0xFE00 && u <= 0xFE0F) ||   // variation selectors
-           (u >= 0xFE20 && u <= 0xFE2F) ||   // combining half marks
-           (u >= 0x1F3FB && u <= 0x1F3FF) || // emoji skin tone modifiers
-           (u >= 0xE0020 && u <= 0xE007F) || // tags
-           (u >= 0xE0100 && u <= 0xE01EF);   // variation selectors supplement
-}
-
-}  // namespace
+using unicode::decodeScalar;
 
 size_t characterCount(std::string_view utf8) {
     size_t count = 0;
     size_t i = 0;
-    uint32_t previous = 0;
-    bool havePrevious = false;
-    bool regionalOdd = false;  // inside a pair of regional indicators (a flag)
+    unicode::GraphemeBreaker breaker;
     while (i < utf8.size()) {
-        const uint32_t u = decodeScalar(utf8, i);
-        bool joins = false;
-        if (havePrevious) {
-            if (previous == '\r' && u == '\n') joins = true;
-            else if (previous == '\r' || previous == '\n') joins = false;
-            else if (isExtend(u) || u == 0x200D) joins = true;   // marks and ZWJ attach to what precedes
-            else if (previous == 0x200D) joins = true;            // emoji ZWJ sequences
-            else if (u >= 0x1F1E6 && u <= 0x1F1FF && regionalOdd) joins = true;
-        }
-        if (u >= 0x1F1E6 && u <= 0x1F1FF) regionalOdd = joins ? false : true;
-        else regionalOdd = false;
-        if (!joins) ++count;
-        previous = u;
-        havePrevious = true;
+        if (breaker.startsCluster(decodeScalar(utf8, i))) ++count;
     }
     return count;
 }
@@ -286,7 +212,9 @@ const std::vector<const Verse*>& Translation::verses(int chapter, int verse) con
 
 // MARK: - TranslationHeader
 
-std::string TranslationHeader::normalizeID(std::string_view id) { return text::toLowerASCII(text::trimASCII(id)); }
+std::string TranslationHeader::normalizeID(std::string_view id) {
+    return unicode::lowercased(unicode::trimWhitespace(id));
+}
 
 namespace {
 
@@ -432,22 +360,27 @@ std::optional<TranslationInfo> TranslationCatalog::info(std::string_view id) con
 
 namespace {
 
-bool lessCaseInsensitive(const std::string& a, const std::string& b) {
-    const size_t n = std::min(a.size(), b.size());
-    for (size_t i = 0; i < n; ++i) {
-        char x = a[i], y = b[i];
-        if (x >= 'A' && x <= 'Z') x = static_cast<char>(x - 'A' + 'a');
-        if (y >= 'A' && y <= 'Z') y = static_cast<char>(y - 'A' + 'a');
-        if (x != y) return static_cast<unsigned char>(x) < static_cast<unsigned char>(y);
-    }
-    return a.size() < b.size();
-}
-
 bool hasSuffix(const std::string& s, std::string_view suffix) {
     return s.size() >= suffix.size() && s.compare(s.size() - suffix.size(), suffix.size(), suffix) == 0;
 }
 
 }  // namespace
+
+namespace {
+
+NameComparator& nameComparator() {
+    static NameComparator comparator;
+    return comparator;
+}
+
+}  // namespace
+
+void setNameComparator(NameComparator comparator) { nameComparator() = std::move(comparator); }
+
+int compareNames(const std::string& a, const std::string& b) {
+    const NameComparator& comparator = nameComparator();
+    return comparator ? comparator(a, b) : unicode::caseInsensitiveCompare(a, b);
+}
 
 void TranslationCatalog::rescan() {
     std::vector<TranslationInfo> list = bundledFound_;
@@ -484,7 +417,7 @@ void TranslationCatalog::rescan() {
         }
     }
     std::stable_sort(imported.begin(), imported.end(),
-                     [](const TranslationInfo& a, const TranslationInfo& b) { return lessCaseInsensitive(a.name, b.name); });
+                     [](const TranslationInfo& a, const TranslationInfo& b) { return compareNames(a.name, b.name) < 0; });
     list.insert(list.end(), imported.begin(), imported.end());
 
     std::lock_guard<std::mutex> lock(mutex_);
@@ -552,6 +485,27 @@ ImportError ImportError::unknownBooks(std::vector<std::string> sortedCodes) {
                        std::move(sortedCodes));
 }
 
+bool TranslationImporter::isValidID(std::string_view id) {
+    // Swift: !id.isEmpty && id.allSatisfy { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }, one Character
+    // (extended grapheme cluster) at a time; isLetter/isNumber look at the cluster's first scalar.
+    if (id.empty()) return false;
+    unicode::GraphemeBreaker breaker;
+    size_t i = 0;
+    uint32_t first = 0;
+    size_t length = 0;  // scalars in the current cluster
+    const auto clusterOK = [&] { return unicode::isLetterOrNumber(first) || (length == 1 && (first == '-' || first == '_')); };
+    while (i < id.size()) {
+        const uint32_t u = decodeScalar(id, i);
+        if (breaker.startsCluster(u)) {
+            if (length && !clusterOK()) return false;
+            first = u;
+            length = 0;
+        }
+        ++length;
+    }
+    return clusterOK();
+}
+
 std::pair<TranslationHeader, size_t> TranslationImporter::validate(std::string_view data) const {
     std::shared_ptr<Translation> translation;
     try {
@@ -564,13 +518,7 @@ std::pair<TranslationHeader, size_t> TranslationImporter::validate(std::string_v
         throw ImportError::invalidFormat("The data couldn’t be read because it isn’t in the correct format.");
     }
     const std::string& id = translation->id();
-    // Swift: Character.isLetter || isNumber || "-" || "_". Non-ASCII characters are accepted as letters.
-    const bool validID = !id.empty() && std::all_of(id.begin(), id.end(), [](char ch) {
-        const auto c = static_cast<unsigned char>(ch);
-        return c >= 0x80 || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' ||
-               c == '_';
-    });
-    if (!validID) throw ImportError::invalidFormat("id must be letters, digits, - or _");
+    if (!isValidID(id)) throw ImportError::invalidFormat("id must be letters, digits, - or _");
     if (translation->name().empty() || translation->abbreviation().empty()) {
         throw ImportError::invalidFormat("name and abbreviation are required");
     }

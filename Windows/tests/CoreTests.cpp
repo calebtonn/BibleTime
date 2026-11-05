@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "Core.h"
+#include "Unicode.h"
 
 #ifdef _WIN32
 #include <process.h>
@@ -471,7 +472,21 @@ int main(int argc, char** argv) {
         check(Preferences().displayMode == DisplayMode::SameVerse, "default display mode shows the same verse everywhere");
         check(Preferences::fromJSONText(R"({"displayMode": "differentVerses"})").displayMode == DisplayMode::DifferentVerses, "display mode decodes");
         check(Preferences::fromJSONText(R"({"displayMode": "nope"})").displayMode == DisplayMode::SameVerse, "bad display mode keeps default");
-        check(Preferences::fromJSONText(R"({"showClock": 0, "preferFamous": "no", "padReference": false})") == [] { Preferences p; p.padReference = false; return p; }(), "only real booleans apply");
+        check(Preferences::fromJSONText(R"({"showClock": 2, "preferFamous": "no", "extendFragments": 0.5, "padReference": false})") == [] { Preferences p; p.padReference = false; return p; }(), "only booleans and the numbers 0/1 apply");
+        // JSONSerialization numbers bridge to Bool when they equal 0 or 1 (NSNumber `as? Bool`).
+        {
+            const Preferences numeric = Preferences::fromJSONText(R"({"showClock": 0, "preferFamous": 0.0, "extendFragments": -0, "padReference": 1e0})");
+            check(!numeric.showClock && !numeric.preferFamous && !numeric.extendFragments && numeric.padReference, "0, 0.0, -0 are false; 1e0 is true");
+            const Preferences ones = Preferences::fromJSONText(R"({"showClock": 1, "preferFamous": 1.0, "extendFragments": -1, "padReference": 1.5})");
+            check(ones.showClock && ones.preferFamous && ones.extendFragments && ones.padReference, "1 and 1.0 are true; -1 and 1.5 keep the default");
+            const Preferences off = Preferences::fromJSONText(R"({"showClock": 1, "preferFamous": true, "extendFragments": false, "padReference": 0})");
+            check(off.showClock && off.preferFamous && !off.extendFragments && !off.padReference, "booleans and 0/1 mixed");
+        }
+        // `as? NSNumber` also accepts JSON booleans for textScale: true is 1.0, false is 0.0 (clamped to the minimum).
+        check(Preferences::fromJSONText(R"({"textScale": true})").textScale == 1.0, "textScale true is 1.0");
+        check(Preferences::fromJSONText(R"({"textScale": false})").textScale == Preferences::textScaleMin, "textScale false is 0.0, clamped");
+        check(Preferences::fromJSONText(R"({"textScale": 1.25})").textScale == 1.25, "fractional textScale");
+        check(Preferences::fromJSONText(R"({"textScale": null})").textScale == 1.0, "null textScale ignored");
         check(Preferences::fromJSONText(R"({"translation": ""})").translation == "kjv" && Preferences::fromJSONText(R"({"translation": "web"})").translation == "web", "empty translation keeps the default");
         check(Preferences::fromJSONText("not json") == defaults && Preferences::fromJSONText("[1,2]") == defaults, "malformed JSON yields defaults");
         Preferences p;
@@ -557,6 +572,53 @@ int main(int argc, char** argv) {
     check(characterCount("\xF0\x9F\x91\xA8\xE2\x80\x8D\xF0\x9F\x91\xA9") == 1, "ZWJ sequence");
     check(characterCount("\xF0\x9F\x87\xBA\xF0\x9F\x87\xB8\xF0\x9F\x87\xAC\xF0\x9F\x87\xA7") == 2, "two flags");
     check(characterCount("\xE2\x9D\xA4\xEF\xB8\x8F") == 1, "variation selector joins");
+    // Imported translations in other scripts: String.count is UAX #29 extended grapheme clusters (Unicode 15.1).
+    check(characterCount("தேவன் உலகத்தில் அன்புகூர்ந்தார்,") == 20, "Tamil: " + std::to_string(characterCount("தேவன் உலகத்தில் அன்புகூர்ந்தார்,")));
+    check(characterCount("क्षत्रिय") == 3, "Devanagari conjuncts join (GB9c)");
+    check(characterCount("हिन्दी") == 2, "Hindi with a virama conjunct");
+    check(characterCount("พระเจ้า") == 6, "Thai: SARA A and SARA E stand alone, MAI THO joins");
+    check(characterCount("ำ") == 1 && characterCount("กำ") == 1, "Thai SARA AM is a SpacingMark");
+    check(characterCount("\xE1\x84\x80\xE1\x85\xA1\xE1\x86\xA8") == 1, "Hangul jamo L V T form one syllable");
+    check(characterCount("\xEA\xB0\x80\xE1\x86\xA8") == 1 && characterCount("\xEA\xB0\x81\xE1\x85\xA1") == 2, "LV + T joins, LVT + V does not");
+    check(characterCount("하나님이 세상을") == 8, "precomposed Hangul");
+    check(characterCount("👨‍👩‍👧‍👦") == 1, "family ZWJ sequence");
+    check(characterCount("🏳️‍🌈") == 1, "rainbow flag (VS16 + ZWJ)");
+    check(characterCount("a\xE2\x80\x8D👍") == 2, "ZWJ after a letter joins the letter only");
+    check(characterCount("🇺🇸🇬") == 2, "odd regional indicator stands alone");
+    check(characterCount("🏴󠁧󠁢󠁳󠁣󠁴󠁿") == 1, "tag sequence flag");
+    check(characterCount("\xD8\xA8\xD9\x90\xD8\xB3\xD9\x92\xD9\x85\xD9\x90") == 3, "Arabic with harakat");
+    check(characterCount("\xD8\x80\xD9\xA1") == 1, "Arabic number sign is Prepend");
+    check(characterCount("בְּרֵאשִׁית") == 6, "Hebrew with points");
+    check(characterCount("\r\n\r\n") == 2 && characterCount("\n\r") == 2 && characterCount("\r\xCC\x81") == 2, "CR LF, LF CR, CR + mark");
+    check(characterCount("\x01\xCC\x81") == 2, "controls do not take marks");
+    {
+        // Every case of the Unicode 15.1 GraphemeBreakTest.txt (generated into GraphemeBreakTest.inc).
+        struct GraphemeCase {
+            size_t count;
+            uint32_t scalars[8];
+            size_t starts[8];
+        };
+#include "GraphemeBreakTest.inc"
+        size_t passed = 0;
+        std::string firstFailure;
+        for (const GraphemeCase& c : kGraphemeBreakCases) {
+            unicode::GraphemeBreaker breaker;
+            std::vector<size_t> starts;
+            std::string utf8;
+            for (size_t k = 0; k < c.count; ++k) {
+                if (breaker.startsCluster(c.scalars[k])) starts.push_back(k);
+                unicode::appendUTF8(utf8, c.scalars[k]);
+            }
+            std::vector<size_t> expected;
+            for (size_t k = 0; k < 8 && (k == 0 || c.starts[k] != 0); ++k) expected.push_back(c.starts[k]);
+            if (starts == expected && characterCount(utf8) == expected.size()) ++passed;
+            else if (firstFailure.empty()) {
+                for (size_t k = 0; k < c.count; ++k) firstFailure += (k ? " " : "") + std::to_string(c.scalars[k]);
+            }
+        }
+        const size_t total = sizeof(kGraphemeBreakCases) / sizeof(kGraphemeBreakCases[0]);
+        check(total > 1000 && passed == total, "GraphemeBreakTest.txt: " + std::to_string(passed) + "/" + std::to_string(total) + " pass; first failure: " + firstFailure);
+    }
     {
         Verse v;
         v.text = "and,";
@@ -639,6 +701,59 @@ int main(int argc, char** argv) {
         check(pow2.next(1 << 10) == raw2.next() >> 54, "a power-of-two bound takes the top bits");
         SeededGenerator salted(at(3, 16, 7), "kjv#1"), unsalted(at(3, 16, 7), "kjv");
         check(salted.next() != unsalted.next(), "salt changes the sequence");
+    }
+
+    section("translation ids");
+    // Swift: id.trimmingCharacters(in: .whitespaces).lowercased().
+    check(TranslationHeader::normalizeID(" \tKJV  ") == "kjv", "ASCII trim and lowercase");
+    check(TranslationHeader::normalizeID("\xC2\xA0\xE3\x80\x80My Bible\xE2\x80\xAF\xE2\x81\x9F\xE1\x9A\x80\xE2\x80\x80\xE2\x80\x8A") == "my bible", "Zs whitespace trimmed at both ends, inner kept");
+    check(TranslationHeader::normalizeID("kjv\n") == "kjv\n" && TranslationHeader::normalizeID("\xE2\x80\x8Bkjv") == "\xE2\x80\x8Bkjv", "newlines and ZWSP are not .whitespaces");
+    check(TranslationHeader::normalizeID("ÀÉÎÕÜÇÑÞ") == "àéîõüçñþ", "Latin-1");
+    check(TranslationHeader::normalizeID("ĀĞŁŐŸŽǄǅǱ") == "āğłőÿžǆǆǳ", "Latin Extended-A/B, title-case digraphs");
+    check(TranslationHeader::normalizeID("ΑΒΓΆΏ") == "αβγάώ", "Greek");
+    check(TranslationHeader::normalizeID("БИБЛИЯ ЁЇЄ") == "библия ёїє", "Cyrillic");
+    check(TranslationHeader::normalizeID("ԱՍՏՎԱԾԱՇՈՒՆՉ") == "աստվածաշունչ", "Armenian");
+    check(TranslationHeader::normalizeID("ႠႡ") == "ⴀⴁ" && TranslationHeader::normalizeID("ᲐᲑ") == "აბ", "Georgian");
+    check(TranslationHeader::normalizeID("İ") == "i\xCC\x87", "U+0130 lowercases to i + combining dot (SpecialCasing)");
+    check(TranslationHeader::normalizeID("ẞ𐐀Ⅻ") == "ß𐐨ⅻ", "capital sharp s, Deseret, Roman numerals");
+    check(TranslationHeader::normalizeID("ß中文ﬀ") == "ß中文ﬀ", "already lowercase or uncased");
+    // Swift: every Character isLetter || isNumber || "-" || "_" (first scalar's Alphabetic / Numeric_Type).
+    check(TranslationImporter::isValidID("kjv") && TranslationImporter::isValidID("my-bible_2"), "ASCII ids");
+    check(TranslationImporter::isValidID("библия") && TranslationImporter::isValidID("中文和合本") && TranslationImporter::isValidID("ελληνικά"), "Cyrillic, Han, Greek letters");
+    check(TranslationImporter::isValidID("பைபிள்") && TranslationImporter::isValidID("हिन्दी") && TranslationImporter::isValidID("성경"), "Tamil, Hindi, Hangul clusters");
+    check(TranslationImporter::isValidID("e\xCC\x81") && TranslationImporter::isValidID("ि"), "letter + mark; vowel sign alone is Alphabetic");
+    check(TranslationImporter::isValidID("½²٣Ⅻ"), "No / Nd / Nl numbers");
+    check(!TranslationImporter::isValidID("") && !TranslationImporter::isValidID("a b") && !TranslationImporter::isValidID("a.b"), "empty, space, period");
+    check(!TranslationImporter::isValidID("bible😀") && !TranslationImporter::isValidID("a\xC2\xA0" "b"), "emoji and NBSP");
+    check(!TranslationImporter::isValidID("\xCC\x81" "a") && !TranslationImporter::isValidID("-\xCC\x81"), "leading mark; \"-\" + mark is not \"-\"");
+    {
+        // Imported translations sort with compareNames (stable); the default is Unicode case-insensitive.
+        check(compareNames("alpha", "ALPHA") == 0 && compareNames("Äpfel", "äPFEL") == 0 && compareNames("beta", "Alpha") > 0, "default comparator");
+        check(unicode::caseInsensitiveCompare("ΒΊΒΛΟΣ", "βίβλοσ") == 0 && unicode::caseInsensitiveCompare("a", "b") < 0, "Greek case-insensitive equality");
+        const fs::path sortRoot = fs::temp_directory_path() / ("BibleTimeSort-" + std::to_string(BT_GETPID()));
+        std::error_code sortEC;
+        fs::remove_all(sortRoot, sortEC);
+        fs::create_directories(sortRoot);
+        const auto header = [&](const char* file, const char* id, const char* name) {
+            writeText(sortRoot / file, std::string("{\"id\":\"") + id + "\",\"name\":\"" + name + "\",\"abbreviation\":\"X\",\"verses\":[]}");
+        };
+        header("a.json", "zeta", "zeta");
+        header("b.json", "same2", "SAME");
+        header("c.json", "eclair", "Éclair");
+        header("d.json", "alpha", "Alpha");
+        header("e.json", "same1", "same");
+        header("f.json", "beta", "beta");
+        VerseClock sorting(directoryLoader(resources), {sortRoot});
+        check(ids(sorting.catalog().available()) == std::vector<std::string>({"kjv", "web", "asv", "alpha", "beta", "same2", "same1", "zeta", "eclair"}),
+              "imported sorted case-insensitively, ties keep file order: " + join(ids(sorting.catalog().available())));
+        setNameComparator([](const std::string& a, const std::string& b) { return unicode::caseInsensitiveCompare(b, a); });
+        sorting.catalog().rescan();
+        check(ids(sorting.catalog().available()) == std::vector<std::string>({"kjv", "web", "asv", "eclair", "zeta", "same2", "same1", "beta", "alpha"}),
+              "installed comparator decides the order: " + join(ids(sorting.catalog().available())));
+        setNameComparator(nullptr);
+        sorting.catalog().rescan();
+        check(ids(sorting.catalog().available()).back() == "eclair", "empty comparator restores the default");
+        fs::remove_all(sortRoot, sortEC);
     }
 
     section("import");

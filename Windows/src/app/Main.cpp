@@ -23,6 +23,7 @@
 #include "OptionsDialog.h"
 #include "Render.h"
 #include "Saver.h"
+#include "Unicode.h"
 #include "Win32.h"
 
 using namespace bt::app;
@@ -82,6 +83,13 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     LocalFree(argv);
 
     HRESULT com = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+    // Imported translations sort like the Mac's localizedCaseInsensitiveCompare (user locale, case-insensitive).
+    bt::setNameComparator([](const std::string& a, const std::string& b) {
+        const std::wstring x = widen(a), y = widen(b);
+        const int r = CompareStringEx(LOCALE_NAME_USER_DEFAULT, LINGUISTIC_IGNORECASE, x.c_str(), static_cast<int>(x.size()),
+                                      y.c_str(), static_cast<int>(y.size()), nullptr, nullptr, 0);
+        return r ? r - CSTR_EQUAL : bt::unicode::caseInsensitiveCompare(a, b);
+    });
 
     std::wstring command;
     std::wstring inlineValue;

@@ -9,6 +9,7 @@
 #include <iterator>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "Core.h"
@@ -306,6 +307,44 @@ int main(int argc, char** argv) {
                     emit(dateString(c.year, c.month, c.day) + " nil");
                 }
             }
+        }
+    }
+
+    // (g) Character counts (String.count) of non-Latin samples: imported translations in other scripts
+    {
+        emit("## character samples");
+        const std::pair<const char*, const char*> samples[] = {
+            {"tamil-verse", "தேவன் உலகத்தில் அன்புகூர்ந்தார்,"},
+            {"tamil-word", "பைபிள்"},
+            {"hindi-word", "हिन्दी"},
+            {"hindi-conjunct", "क्षत्रिय"},
+            {"hindi-verse", "क्योंकि परमेश्वर ने जगत से ऐसा प्रेम रखा"},
+            {"bengali", "ঈশ্বর জগৎকে এত প্রেম করিলেন"},
+            {"malayalam", "ദൈവം ലോകത്തെ സ്നേഹിച്ചു"},
+            {"telugu", "దేవుడు లోకమును ప్రేమించెను"},
+            {"thai-verse", "พระเจ้าทรงรักโลก"},
+            {"thai-am", "กำลังน้ำ"},
+            {"amharic", "እግዚአብሔር ዓለሙን"},
+            {"korean-verse", "하나님이 세상을 이처럼 사랑하사"},
+            {"korean-jamo", "\u1100\u1161\u11A8\u1100\u1161"},
+            {"korean-jamo-mixed", "\u1100\u1100\u1161가\u11A8각\u1161"},
+            {"chinese", "神爱世人，甚至将他的独生子赐给他们"},
+            {"arabic-verse", "لأَنَّهُ هكَذَا أَحَبَّ اللهُ الْعَالَمَ"},
+            {"arabic-prepend", "\u0600١٢ \u06DD٣"},
+            {"hebrew-points", "כִּי־כֵן אָהַב אֱלֹהִים אֶת־הָעוֹלָם"},
+            {"greek-polytonic", "Οὕτως γὰρ ἠγάπησεν ὁ θεὸς τὸν κόσμον"},
+            {"combining-stack", "e\u0301\u0302o\u0308\u0323 a\u20DD"},
+            {"crlf", "a\r\nb\r\n\n\rc\r\u0301"},
+            {"emoji-family", "\U0001F468\u200D\U0001F469\u200D\U0001F467\u200D\U0001F466"},
+            {"emoji-skin", "\U0001F44D\U0001F3FD\U0001F44D \U0001F9D1\U0001F3FE\u200D\U0001F91D\u200D\U0001F9D1\U0001F3FB"},
+            {"emoji-rainbow-vs16", "\U0001F3F3\uFE0F\u200D\U0001F308 \u2764\uFE0F 1\uFE0F\u20E3"},
+            {"flags", "\U0001F1FA\U0001F1F8\U0001F1EC\U0001F1E7\U0001F1E9"},
+            {"flag-tags", "\U0001F3F4\U000E0067\U000E0062\U000E0073\U000E0063\U000E0074\U000E007F"},
+            {"zwj-after-letter", "a\u200D\U0001F44D \u200D\u200D"},
+        };
+        for (const auto& sample : samples) {
+            emit(std::string(sample.first) + " " + std::to_string(characterCount(sample.second)) + " " +
+                 std::to_string(scalarCount(sample.second)));
         }
     }
 

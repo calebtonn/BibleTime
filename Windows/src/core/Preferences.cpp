@@ -138,16 +138,23 @@ Preferences Preferences::fromJSON(const json::Value& d) {
         const json::Value* v = d.find(key);
         return v && v->isString() ? &v->asString() : nullptr;
     };
+    // JSONSerialization hands Swift NSNumbers: `as? Bool` accepts true/false and any number equal to 0 or 1
+    // (0, 1, 0.0, 1.0, 1e0), and `as? NSNumber` accepts booleans too (true is 1.0, false 0.0).
     const auto boolean = [&d](const char* key, bool& out) {
         const json::Value* v = d.find(key);
-        if (v && v->isBool()) out = v->asBool();
+        if (!v) return;
+        if (v->isBool()) out = v->asBool();
+        else if (v->isNumber() && (v->asDouble() == 0 || v->asDouble() == 1)) out = v->asDouble() == 1;
     };
     if (const auto* v = string("translation"); v && !v->empty()) p.translation = *v;
     if (const auto* v = string("hourStyle")) { if (auto e = hourStyleFrom(*v)) p.hourStyle = *e; }
     if (const auto* v = string("theme")) { if (auto e = themeFrom(*v)) p.theme = *e; }
     if (const auto* v = string("layout")) { if (auto e = layoutFrom(*v)) p.layout = *e; }
     if (const auto* v = string("typeface")) { if (auto e = typefaceFrom(*v)) p.typeface = *e; }
-    if (const json::Value* v = d.find("textScale"); v && v->isNumber()) p.textScale = v->asDouble();
+    if (const json::Value* v = d.find("textScale")) {
+        if (v->isNumber()) p.textScale = v->asDouble();
+        else if (v->isBool()) p.textScale = v->asBool() ? 1.0 : 0.0;
+    }
     boolean("showClock", p.showClock);
     boolean("preferFamous", p.preferFamous);
     boolean("extendFragments", p.extendFragments);
