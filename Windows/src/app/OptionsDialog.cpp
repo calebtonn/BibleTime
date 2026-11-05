@@ -192,7 +192,10 @@ private:
             if (firstReal < 0) firstReal = i;
             if (translations_[static_cast<size_t>(data)].id == selectID) select = i;
         }
-        SendMessageW(combo, CB_SETCURSEL, select >= 0 ? select : (firstReal >= 0 ? firstReal : 0), 0);
+        int chosen = select >= 0 ? select : (firstReal >= 0 ? firstReal : 0);
+        SendMessageW(combo, CB_SETCURSEL, static_cast<WPARAM>(chosen), 0);
+        // CB_SETCURSEL sends no CBN_SELCHANGE: record the new selection so the separator skip knows where travel starts.
+        lastTranslationSel_ = chosen;
         updateRemoveButton();
     }
 
@@ -262,16 +265,23 @@ private:
     }
 
     void onTranslationChanged() {
-        // The separator is not selectable: step past it in the direction of travel.
+        // The separator is not selectable: step past it in the direction of travel (keyboard Up/Down, the mouse wheel,
+        // arrows in the open list, type-to-find), measured from the last real selection, never from a separator.
         HWND combo = item(IDC_TRANSLATION);
         LRESULT sel = SendMessageW(combo, CB_GETCURSEL, 0, 0);
         if (sel != CB_ERR && SendMessageW(combo, CB_GETITEMDATA, static_cast<WPARAM>(sel), 0) == kSeparatorItem) {
-            LRESULT next = sel + 1 < SendMessageW(combo, CB_GETCOUNT, 0, 0) ? sel + 1 : sel - 1;
-            if (lastTranslationSel_ > sel && sel > 0) next = sel - 1;
-            SendMessageW(combo, CB_SETCURSEL, static_cast<WPARAM>(next), 0);
-            sel = next;
+            const LRESULT count = SendMessageW(combo, CB_GETCOUNT, 0, 0);
+            const bool movingUp = lastTranslationSel_ != CB_ERR && lastTranslationSel_ > sel;
+            LRESULT next = movingUp ? sel - 1 : sel + 1;
+            if (next < 0 || next >= count) next = movingUp ? sel + 1 : sel - 1;  // nothing that way: the other side
+            if (next >= 0 && next < count) {
+                SendMessageW(combo, CB_SETCURSEL, static_cast<WPARAM>(next), 0);
+                sel = next;
+            }
         }
-        lastTranslationSel_ = sel;
+        if (sel != CB_ERR && SendMessageW(combo, CB_GETITEMDATA, static_cast<WPARAM>(sel), 0) != kSeparatorItem) {
+            lastTranslationSel_ = sel;
+        }
         updateRemoveButton();
     }
 
@@ -348,7 +358,9 @@ private:
             case IDC_IMPORT: importTranslation(); return TRUE;
             case IDC_REMOVE: removeTranslation(); return TRUE;
             case IDC_TRANSLATION:
-                if (code == CBN_SELCHANGE) onTranslationChanged();
+                // Closing the list (Escape restores the old selection without a CBN_SELCHANGE) re-syncs too, so the
+                // recorded selection and the Remove button never describe an item that is no longer selected.
+                if (code == CBN_SELCHANGE || code == CBN_CLOSEUP || code == CBN_SELENDCANCEL) onTranslationChanged();
                 return TRUE;
             default: return FALSE;
             }

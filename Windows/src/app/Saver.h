@@ -60,6 +60,9 @@ public:
 
     /// Size in DIPs and device pixels per DIP. Lays out again (without a fade) when it changed.
     void setBounds(double widthDips, double heightDips, double scale);
+    /// Which display this view stands for (0 = main; picks the verse variant). Lays out again when it changed.
+    void setDisplayIndex(int displayIndex);
+    int displayIndex() const { return displayIndex_; }
     /// Advance time: minute changes start a crossfade, settings changes relayout, drift moves every 5 minutes.
     /// Returns true when the view needs to be redrawn.
     bool tick();

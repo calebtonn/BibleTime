@@ -69,9 +69,10 @@ int setActive() {
     }
     bool ok = setString(key, L"SCRNSAVE.EXE", modulePath());
     ok = setString(key, L"ScreenSaveActive", L"1") && ok;
-    bool hasTimeout = false;
-    readString(key, L"ScreenSaveTimeOut", &hasTimeout);
-    if (!hasTimeout) ok = setString(key, L"ScreenSaveTimeOut", L"600") && ok;
+    // Only seed a timeout when none is set at all. Whatever type an existing value has (REG_SZ as Windows writes it,
+    // or a REG_DWORD from a policy script), it is the user's choice and stays as it is.
+    LSTATUS timeout = RegQueryValueExW(key, L"ScreenSaveTimeOut", nullptr, nullptr, nullptr, nullptr);
+    if (timeout == ERROR_FILE_NOT_FOUND) ok = setString(key, L"ScreenSaveTimeOut", L"600") && ok;
     RegCloseKey(key);
     // Apply to the running session and broadcast WM_SETTINGCHANGE so an open Screen Saver Settings page updates.
     SystemParametersInfoW(SPI_SETSCREENSAVEACTIVE, TRUE, nullptr, SPIF_SENDCHANGE);

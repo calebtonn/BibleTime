@@ -108,6 +108,12 @@ void SaverView::setBounds(double widthDips, double heightDips, double scale) {
     refresh(false);
 }
 
+void SaverView::setDisplayIndex(int displayIndex) {
+    if (displayIndex == displayIndex_) return;
+    displayIndex_ = displayIndex;
+    refresh(false);
+}
+
 void SaverView::endFade() {
     fadeStart_.reset();
     previous_.reset();
@@ -213,9 +219,19 @@ public:
         }
     }
 
-    bool create(HWND parent, const RECT& rect, bool fullScreen);
+    /// `activate` asks for the foreground (full screen only); otherwise the window is shown without activation.
+    bool create(HWND parent, const RECT& rect, bool fullScreen, bool activate);
     HWND hwnd() const { return hwnd_; }
     SaverView& view() { return view_; }
+    /// The monitor this window covers: its device name (\\.\DISPLAYn, stable across display changes) and rectangle.
+    const std::wstring& monitorDevice() const { return monitorDevice_; }
+    const RECT& monitorRect() const { return monitorRect_; }
+    void setMonitor(const std::wstring& device, const RECT& rect) {
+        monitorDevice_ = device;
+        monitorRect_ = rect;
+    }
+    /// Cover `rect` (full screen): reposition without activating, pick up the DPI there, lay out and redraw.
+    void moveTo(const RECT& rect);
     void updateGeometry();
     void paint();
 
@@ -229,6 +245,8 @@ private:
     SaverView view_;
     HWND hwnd_ = nullptr;
     bool fullScreen_ = false;
+    std::wstring monitorDevice_;
+    RECT monitorRect_{};
     ComPtr<ID2D1HwndRenderTarget> target_;
     ComPtr<ID2D1SolidColorBrush> brush_;
 };
@@ -255,20 +273,33 @@ public:
     void invalidateAll() {
         for (auto& w : windows_) InvalidateRect(w->hwnd(), nullptr, FALSE);
     }
-    /// Classic screen saver input rule: any movement beyond a few pixels from the first position ends it.
+    /// Classic screen saver input rule: any movement beyond a few pixels from the first position ends it. During the
+    /// grace period the position only sets the baseline (window creation and display changes move the cursor).
     void mouseMoved(POINT p) {
-        if (!firstMouse_) {
+        if (!firstMouse_ || !pastStartupGrace()) {
             firstMouse_ = p;
             return;
         }
         if (std::abs(p.x - firstMouse_->x) > kMouseThreshold || std::abs(p.y - firstMouse_->y) > kMouseThreshold) quit();
     }
-    /// Deactivation during the first half second is ignored (window creation can briefly shuffle activation).
-    bool pastStartupGrace() const { return monotonicSeconds() - startedAt_ > 0.5; }
+    /// Deactivation during the first half second (after start or a display change) is ignored: window creation and
+    /// moves can briefly shuffle activation.
+    bool pastStartupGrace() const { return monotonicSeconds() - startedAt_ > kGraceSeconds; }
+    /// A display change is under way: restart the grace period and forget the cursor baseline.
+    void beginGrace() {
+        startedAt_ = monotonicSeconds();
+        firstMouse_.reset();
+    }
 
 private:
+    static constexpr double kGraceSeconds = 0.5;
     static LRESULT CALLBACK controllerProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
-    void buildWindows();
+    /// Make the windows match the monitors: on start creates one per monitor; after a display change keeps existing
+    /// windows (moving them to the new rectangles), creates windows only for added monitors and destroys only surplus.
+    void syncWindows(bool initial);
+    bool ownsForeground() const;
+    /// True when a saver window is (or could be made) the foreground window.
+    bool ensureForeground();
     void tick();
     void schedule(bool fading);
 
@@ -278,6 +309,8 @@ private:
     std::optional<POINT> firstMouse_;
     bool quitting_ = false;
     double startedAt_ = monotonicSeconds();
+    /// After a display change: when to confirm that a saver window still has the foreground.
+    std::optional<double> verifyForegroundAt_;
 };
 
 void registerClasses() {
@@ -297,8 +330,9 @@ void registerClasses() {
     RegisterClassExW(&wc);
 }
 
-bool SaverWindow::create(HWND parent, const RECT& rect, bool fullScreen) {
+bool SaverWindow::create(HWND parent, const RECT& rect, bool fullScreen, bool activate) {
     fullScreen_ = fullScreen;
+    monitorRect_ = rect;
     DWORD style = fullScreen ? WS_POPUP : (WS_CHILD | WS_CLIPSIBLINGS);
     DWORD exStyle = fullScreen ? (WS_EX_TOPMOST | WS_EX_TOOLWINDOW) : 0;
     hwnd_ = CreateWindowExW(exStyle, kSaverClass, L"BibleTime", style, rect.left, rect.top, rect.right - rect.left,
@@ -306,9 +340,21 @@ bool SaverWindow::create(HWND parent, const RECT& rect, bool fullScreen) {
     if (!hwnd_) return false;
     updateGeometry();
     paint();  // draw before showing so the first visible frame is the page, not the desktop
-    ShowWindow(hwnd_, fullScreen ? SW_SHOW : SW_SHOWNA);
-    if (fullScreen) SetForegroundWindow(hwnd_);
+    const bool takeForeground = fullScreen && activate;
+    ShowWindow(hwnd_, takeForeground ? SW_SHOW : SW_SHOWNA);
+    if (takeForeground) SetForegroundWindow(hwnd_);
     return true;
+}
+
+void SaverWindow::moveTo(const RECT& rect) {
+    monitorRect_ = rect;
+    // Re-assert topmost and show (a display change may have hidden or reordered us); never activate here, so the
+    // window that has the foreground keeps it. A move across DPIs sends WM_DPICHANGED, which updates geometry too.
+    SetWindowPos(hwnd_, HWND_TOPMOST, rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top,
+                 SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_NOOWNERZORDER);
+    updateGeometry();  // same size but new DPI, or a lost render target: still resize and lay out
+    paint();
+    InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
 void SaverWindow::updateGeometry() {
@@ -457,7 +503,7 @@ bool SaverApp::start() {
     controller_ = CreateWindowExW(0, kControllerClass, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, instance, this);
     if (!controller_) return false;
     SetWindowLongPtrW(controller_, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
-    buildWindows();
+    syncWindows(true);
     if (windows_.empty()) return false;
     tick();
     return true;
@@ -472,26 +518,25 @@ int SaverApp::run() {
     return 0;
 }
 
-void SaverApp::buildWindows() {
-    windows_.clear();
-    if (!fullScreen()) {
-        RECT rc{};
-        GetClientRect(previewParent_, &rc);
-        auto w = std::make_unique<SaverWindow>(*this, 0, true);
-        if (w->create(previewParent_, rc, false)) windows_.push_back(std::move(w));
-        return;
-    }
-    // Display index 0 is the primary monitor; the others follow left to right, then top to bottom.
-    struct Monitor {
-        RECT rect;
-        bool primary;
-    };
+struct Monitor {
+    RECT rect;
+    bool primary;
+    std::wstring device;
+};
+
+bool sameRect(const RECT& a, const RECT& b) {
+    return a.left == b.left && a.top == b.top && a.right == b.right && a.bottom == b.bottom;
+}
+
+/// Every monitor; index 0 is the primary, the others follow left to right, then top to bottom.
+std::vector<Monitor> enumerateMonitors() {
     std::vector<Monitor> monitors;
     EnumDisplayMonitors(nullptr, nullptr, [](HMONITOR m, HDC, LPRECT, LPARAM data) -> BOOL {
-        MONITORINFO info{};
+        MONITORINFOEXW info{};
         info.cbSize = sizeof(info);
         if (GetMonitorInfoW(m, &info)) {
-            reinterpret_cast<std::vector<Monitor>*>(data)->push_back({info.rcMonitor, (info.dwFlags & MONITORINFOF_PRIMARY) != 0});
+            reinterpret_cast<std::vector<Monitor>*>(data)->push_back(
+                {info.rcMonitor, (info.dwFlags & MONITORINFOF_PRIMARY) != 0, info.szDevice});
         }
         return TRUE;
     }, reinterpret_cast<LPARAM>(&monitors));
@@ -501,11 +546,98 @@ void SaverApp::buildWindows() {
         return a.rect.top < b.rect.top;
     });
     if (monitors.empty()) {
-        monitors.push_back({{0, 0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN)}, true});
+        monitors.push_back({{0, 0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN)}, true, std::wstring()});
     }
+    return monitors;
+}
+
+bool SaverApp::ownsForeground() const {
+    HWND foreground = GetForegroundWindow();
+    if (!foreground) return false;
+    for (const auto& w : windows_) {
+        if (w->hwnd() == foreground) return true;
+    }
+    return false;
+}
+
+bool SaverApp::ensureForeground() {
+    if (ownsForeground()) return true;
+    if (windows_.empty()) return false;
+    SetForegroundWindow(windows_.front()->hwnd());
+    return ownsForeground();
+}
+
+void SaverApp::syncWindows(bool initial) {
+    if (!fullScreen()) {
+        if (!initial) return;
+        RECT rc{};
+        GetClientRect(previewParent_, &rc);
+        auto w = std::make_unique<SaverWindow>(*this, 0, true);
+        if (w->create(previewParent_, rc, false, false)) windows_.push_back(std::move(w));
+        return;
+    }
+    if (!initial) beginGrace();
+    const std::vector<Monitor> monitors = enumerateMonitors();
+
+    // Match existing windows to monitors without touching any window yet (so messages sent while windows move can
+    // still walk windows_): same device first, then the same rectangle, then any window left over.
+    std::vector<int> source(monitors.size(), -1);
+    std::vector<bool> used(windows_.size(), false);
+    auto match = [&](auto&& same) {
+        for (size_t i = 0; i < monitors.size(); ++i) {
+            if (source[i] >= 0) continue;
+            for (size_t j = 0; j < windows_.size(); ++j) {
+                if (used[j] || !same(*windows_[j], monitors[i])) continue;
+                source[i] = static_cast<int>(j);
+                used[j] = true;
+                break;
+            }
+        }
+    };
+    match([](const SaverWindow& w, const Monitor& m) { return !m.device.empty() && w.monitorDevice() == m.device; });
+    match([](const SaverWindow& w, const Monitor& m) { return sameRect(w.monitorRect(), m.rect); });
+    match([](const SaverWindow&, const Monitor&) { return true; });
+
+    // Kept windows move to their (possibly new) monitor and take its display index (variant, main-only darkening).
     for (size_t i = 0; i < monitors.size(); ++i) {
+        if (source[i] < 0) continue;
+        SaverWindow& w = *windows_[static_cast<size_t>(source[i])];
+        w.setMonitor(monitors[i].device, monitors[i].rect);
+        w.view().setDisplayIndex(static_cast<int>(i));
+        w.moveTo(monitors[i].rect);
+    }
+    // New windows only for monitors that were added. They ask for the foreground only when no saver window has it.
+    std::vector<std::unique_ptr<SaverWindow>> created(monitors.size());
+    for (size_t i = 0; i < monitors.size(); ++i) {
+        if (source[i] >= 0) continue;
         auto w = std::make_unique<SaverWindow>(*this, static_cast<int>(i), false);
-        if (w->create(nullptr, monitors[i].rect, true)) windows_.push_back(std::move(w));
+        w->setMonitor(monitors[i].device, monitors[i].rect);
+        if (w->create(nullptr, monitors[i].rect, true, initial || !ownsForeground())) created[i] = std::move(w);
+    }
+
+    // Surplus windows (their monitor went away) go last. If one of them is the foreground window, hand the
+    // foreground to a window that stays first, while this process still may.
+    std::vector<std::unique_ptr<SaverWindow>> next, surplus;
+    for (size_t i = 0; i < monitors.size(); ++i) {
+        if (source[i] >= 0) next.push_back(std::move(windows_[static_cast<size_t>(source[i])]));
+        else if (created[i]) next.push_back(std::move(created[i]));
+    }
+    for (size_t j = 0; j < windows_.size(); ++j) {
+        if (!used[j]) surplus.push_back(std::move(windows_[j]));
+    }
+    HWND foreground = GetForegroundWindow();
+    bool surplusHasForeground = false;
+    for (const auto& w : surplus) surplusHasForeground = surplusHasForeground || w->hwnd() == foreground;
+    windows_ = std::move(next);
+    if (surplusHasForeground && !windows_.empty()) SetForegroundWindow(windows_.front()->hwnd());
+    surplus.clear();
+
+    if (!initial) {
+        // A cover that is not the foreground window gets no keyboard input and no deactivation: if no saver window
+        // can be made active now, give the system a moment (display changes shuffle activation), then end.
+        ensureForeground();
+        beginGrace();
+        verifyForegroundAt_ = monotonicSeconds() + kGraceSeconds;
     }
 }
 
@@ -514,6 +646,13 @@ void SaverApp::tick() {
     if (!fullScreen() && !IsWindow(previewParent_)) {
         quit();
         return;
+    }
+    if (verifyForegroundAt_ && monotonicSeconds() >= *verifyForegroundAt_) {
+        verifyForegroundAt_.reset();
+        if (!ensureForeground()) {
+            quit();
+            return;
+        }
     }
     SaverContext::shared().pollSettings();
     bool fading = false;
@@ -553,12 +692,14 @@ LRESULT CALLBACK SaverApp::controllerProc(HWND hwnd, UINT msg, WPARAM wParam, LP
             self->tick();
         } else if (wParam == kRebuildTimer) {
             KillTimer(hwnd, kRebuildTimer);
-            self->buildWindows();
+            self->syncWindows(false);
             self->tick();
         }
         return 0;
     case kMsgRebuild:
-        // Display changes arrive in bursts; rebuild once things settle.
+        // Display changes arrive in bursts; reconcile once things settle. Until then the cursor may jump and activation
+        // shuffle as the desktop is rearranged: neither must end the saver.
+        self->beginGrace();
         SetTimer(hwnd, kRebuildTimer, 300, nullptr);
         return 0;
     default: return DefWindowProcW(hwnd, msg, wParam, lParam);
