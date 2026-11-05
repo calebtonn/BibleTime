@@ -5,7 +5,7 @@ name: Build
 #   BibleTime-macOS.zip, BibleTime-Windows-Setup.exe, BibleTime-Windows-Portable.zip
 on:
   push:
-    branches: [main]
+    branches: ["**"]
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
