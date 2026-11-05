@@ -41,8 +41,7 @@ Typical use (from the repository root):
       --out ~/Desktop/esv.json
 
   python3 -I Tools/build_verses.py lists \
-      --translations Resources/Translations/kjv.json Resources/Translations/web.json \
-                     Resources/Translations/asv.json \
+      --translations Resources/Translations/kjv.json Resources/Translations/dby.json \
       --books-source /path/to/eng-kjv2006_usfx.xml \
       --curated /path/to/curated_verses.json --hours /path/to/hour_verses.json \
       --out-dir Resources
@@ -101,8 +100,7 @@ EBIBLE_SCRIPTURES = "https://ebible.org/Scriptures/"
 # <data-dir>/<ebible_id>/copr.htm (both come out of the eBible USFX zip).
 TRANSLATIONS = [
     {"id": "kjv", "ebible_id": "eng-kjv2006", "name": "King James Version", "abbreviation": "KJV"},
-    {"id": "web", "ebible_id": "engwebp", "name": "World English Bible", "abbreviation": "WEB"},
-    {"id": "asv", "ebible_id": "eng-asv", "name": "American Standard Version", "abbreviation": "ASV"},
+    {"id": "dby", "ebible_id": "engDBY", "name": "Darby Translation", "abbreviation": "DBY"},
 ]
 
 
@@ -924,6 +922,13 @@ def main(argv=None):
                 chapters = ch
         if chapters is None:
             chapters = ch
+        # Drop translation files this list no longer builds, so Resources holds exactly TRANSLATIONS.
+        keep = {t["id"] + ".json" for t in TRANSLATIONS}
+        tdir = os.path.join(args.out_dir, "Translations")
+        for name in sorted(os.listdir(tdir)):
+            if name.endswith(".json") and name not in keep:
+                log("[all] removing %s (not in TRANSLATIONS)" % os.path.join(tdir, name))
+                os.remove(os.path.join(tdir, name))
         build_lists(docs, curated, hours, chapters, args.out_dir)
         return 0
 
