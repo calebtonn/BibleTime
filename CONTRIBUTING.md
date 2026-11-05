@@ -2,6 +2,10 @@
 
 Thanks for helping. This file covers the development loop; the README covers what the project is.
 
+BibleTime has two front ends that share one design: the macOS screen saver in Swift (`Sources/`) and the
+Windows screen saver in C++ (`Windows/`). The first sections below are about the Mac; see [Windows](#windows) for
+the other half and [Keeping the two cores identical](#keeping-the-two-cores-identical) for the rule that binds them.
+
 ## Requirements
 
 - macOS 12 or later. Development has been done on macOS 26.
@@ -70,6 +74,8 @@ Sources/BibleTime/       AppKit: the ScreenSaverView, renderer, theme, options s
 Resources/               books.json, curated.json, hour_verses.json, Translations/*.json
 Tools/                   build_verses.py (data pipeline), SaverHost.swift (dev host)
 Tests/CoreTests/         plain-Swift test executable (run by `make test` or `swift run CoreTests Resources`)
+Tests/CrossCheck/        Swift half of the Swift/C++ cross-check (`make crosscheck`)
+Windows/                 the Windows screen saver (see below)
 ```
 
 The core must not import AppKit so it stays testable and portable. The Makefile compiles both folders into
@@ -99,7 +105,114 @@ renders the Options sheet to `build/renders/options.png` through the host's `--s
 - Everything the saver draws must scale with `bounds`; never assume a screen size.
 - No network access, no file access outside the bundle.
 
+## Windows
+
+### Layout
+
+```
+Windows/CMakeLists.txt   targets: bibletime_core (static lib), core_tests, crosscheck, and BibleTime.scr on Windows
+Windows/src/core/        portable C++17 port of Sources/BibleTimeCore (no Windows headers): Core.h is the API
+Windows/src/app/         Win32 + Direct2D + DirectWrite screen saver, Options dialog, /render, /setactive (App.cmake)
+Windows/res/             icon, manifest, resource script (the verse JSON is embedded as RCDATA)
+Windows/tests/           CoreTests.cpp (mirrors Tests/CoreTests) and CrossCheck.cpp (mirrors Tests/CrossCheck)
+Windows/installer/       Inno Setup script for BibleTime-Windows-Setup.exe, "How to install.txt" for the portable zip
+Windows/cmake/           mingw-w64 cross-compilation toolchain
+```
+
+`BibleTime.scr` is a single self-contained executable: all verse data is compiled in, the C runtime is linked
+statically, and it uses only DLLs that ship with Windows 10 and 11.
+
+### Build
+
+With Visual Studio 2022 (Desktop development with C++), from a Developer Command Prompt or any shell with CMake:
+
+```bat
+cmake -S Windows -B build\windows -A x64
+cmake --build build\windows --config Release
+build\windows\bin\core_tests.exe Resources
+```
+
+Or cross-compile on Linux or macOS with mingw-w64 (`apt install mingw-w64`, `brew install mingw-w64`):
+
+```bash
+cmake -S Windows -B build/windows-mingw -DCMAKE_TOOLCHAIN_FILE=Windows/cmake/mingw-w64.cmake -DCMAKE_BUILD_TYPE=Release
+cmake --build build/windows-mingw
+```
+
+The core and its tests build on any OS with a C++17 compiler:
+`cmake -S Windows -B build/core && cmake --build build/core && build/core/bin/core_tests Resources`.
+
+Warnings are errors (`/W4 /WX` on MSVC, `-Wall -Wextra -Werror` elsewhere); keep both clean.
+
+### The development loop
+
+Like System Settings on the Mac, Screen Saver Settings is a poor place to iterate. `BibleTime.scr` has two
+developer switches that render offscreen and exit, and they honour the same `BIBLETIME_TIME`, `BIBLETIME_PREFS`,
+`BIBLETIME_REF` and `BIBLETIME_DISPLAY` variables as `SaverHost`:
+
+```bat
+set BIBLETIME_TIME=15:16
+set BIBLETIME_PREFS={"layout":"book","theme":"night"}
+build\windows\bin\BibleTime.scr /render out.png --width 1920 --height 1080
+build\windows\bin\BibleTime.scr /render preview.png --width 296 --height 184 --preview
+build\windows\bin\BibleTime.scr /render-options options.png
+```
+
+`/render` also takes `--scale S` to simulate a high-DPI display. The other switches are the standard screen saver
+ones plus two for the installer:
+
+| Switch | Effect |
+| --- | --- |
+| `/s` | Run full screen on every monitor. |
+| `/p <hwnd>` | Draw the preview inside the Screen Saver Settings thumbnail. |
+| `/c` or none | Show the Options dialog. |
+| `/setactive` | Make BibleTime the current user's screen saver (the installer's "Use BibleTime as my screen saver"). |
+| `/unsetactive` | Undo that if BibleTime is still the chosen saver (run by the uninstaller). |
+
+Right-click the built `BibleTime.scr` and choose **Install** to try it in Screen Saver Settings without the
+installer. Under Wine (`WINEDEBUG=-all wine build/windows-mingw/bin/BibleTime.scr /render out.png`) the renders
+work but use Wine's fonts, so check typography on real Windows.
+
+Settings live in `%APPDATA%\BibleTime\settings.json` with the same keys and values as `Preferences.swift`;
+imported translations in `%APPDATA%\BibleTime\Translations\`.
+
+### Installer and portable zip
+
+CI builds both (see `.github/workflows/build.yml`). Locally, after a Release build in `build\windows`:
+
+```bat
+"C:\Program Files (x86)\Inno Setup 6\ISCC.exe" Windows\installer\BibleTime.iss
+```
+
+writes `build\windows\installer\BibleTime-Windows-Setup.exe`. The script reads the version from `VERSION`;
+`/DAppVersion=…`, `/DSourceScr=…` and `/O…` override the version, the input `.scr` and the output folder. It
+installs `BibleTime.scr` into System32 (where Screen Saver Settings looks), so it needs administrator rights;
+the "Use BibleTime as my screen saver" step runs as the user who started Setup. Never change the `AppId` GUID:
+it is how an upgrade finds the previous install. The portable zip is just `BibleTime.scr` plus
+`Windows/installer/How to install.txt` (keep that file plain, friendly and in CRLF line endings).
+
+## Keeping the two cores identical
+
+`Windows/src/core` is a line-for-line port of `Sources/BibleTimeCore`: every Mac and every PC must show the same
+verse at the same minute. The rule is simple: **change both**. Any change to verse selection, preferences,
+canon or translation loading goes into the Swift core and the C++ core in the same pull request, with the tests
+in `Tests/CoreTests` and `Windows/tests/CoreTests.cpp` kept in step, and `Tests/CrossCheck/main.swift` and
+`Windows/tests/CrossCheck.cpp` printing the same sections.
+
+`make crosscheck` (on a Mac) builds the Swift and C++ cross-check programs, runs both over every minute and
+translation, and fails on any difference. CI runs it on macOS with clang, and also compares the Swift output with
+the MSVC build's output from the Windows job.
+
+## Releases
+
+1. Bump `VERSION` (it feeds the Mac `Info.plist`, the Windows version resource and the installer).
+2. Merge to `main` and push a tag `v<VERSION>`, e.g. `git tag v1.1.0 && git push origin v1.1.0`.
+3. The workflow builds and tests both platforms, checks the tag matches `VERSION`, and publishes one release with
+   `BibleTime-macOS.zip`, `BibleTime-Windows-Setup.exe` and `BibleTime-Windows-Portable.zip`. The file names carry
+   no version so the README's `releases/latest/download/…` links keep working; do not rename them.
+
 ## Pull requests
 
 Run `make test` and `make render`, look at the renders, and include a screenshot when you change anything
-visual.
+visual. If you touch the core, also run `make crosscheck`. If you touch Windows code, build it (MSVC or mingw)
+and run `core_tests` and a few `/render`s; CI uploads Windows renders as the `renders-windows` artifact.

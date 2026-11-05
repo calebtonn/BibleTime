@@ -1,0 +1,91 @@
+// Generated from Windows/res/BibleTime.rc.in by CMake (configure_file) so the embedded data uses absolute paths
+// that both MSVC rc and windres resolve. Keep this file ASCII; non-ASCII UI text is set at runtime.
+#include <winres.h>
+#include "resource.h"
+
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+
+1 RT_MANIFEST "@BT_RES_DIR@/BibleTime.manifest"
+
+IDI_APP ICON "@BT_RES_DIR@/BibleTime.ico"
+
+STRINGTABLE
+BEGIN
+    IDS_DESCRIPTION "BibleTime"
+END
+
+IDR_BOOKS_JSON       RCDATA "@BT_RESOURCES_ABS@/books.json"
+IDR_CURATED_JSON     RCDATA "@BT_RESOURCES_ABS@/curated.json"
+IDR_HOUR_VERSES_JSON RCDATA "@BT_RESOURCES_ABS@/hour_verses.json"
+IDR_KJV_JSON         RCDATA "@BT_RESOURCES_ABS@/Translations/kjv.json"
+IDR_WEB_JSON         RCDATA "@BT_RESOURCES_ABS@/Translations/web.json"
+IDR_ASV_JSON         RCDATA "@BT_RESOURCES_ABS@/Translations/asv.json"
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION @BT_VERSION_MAJOR@,@BT_VERSION_MINOR@,@BT_VERSION_PATCH@,0
+ PRODUCTVERSION @BT_VERSION_MAJOR@,@BT_VERSION_MINOR@,@BT_VERSION_PATCH@,0
+ FILEFLAGSMASK 0x3fL
+ FILEFLAGS 0x0L
+ FILEOS VOS_NT_WINDOWS32
+ FILETYPE VFT_APP
+ FILESUBTYPE VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"
+        BEGIN
+            VALUE "CompanyName", "BibleTime"
+            VALUE "FileDescription", "BibleTime"
+            VALUE "FileVersion", "@BT_VERSION@"
+            VALUE "InternalName", "BibleTime"
+            VALUE "LegalCopyright", "BibleTime contributors"
+            VALUE "OriginalFilename", "BibleTime.scr"
+            VALUE "ProductName", "BibleTime"
+            VALUE "ProductVersion", "@BT_VERSION@"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END
+
+// Options dialog. Layout mirrors Sources/BibleTime/ConfigureSheet.swift; Segoe UI 9 pt like native Windows dialogs.
+// Per-Monitor V2 DPI awareness lets Windows rescale it when it moves between monitors.
+IDD_OPTIONS DIALOGEX 0, 0, 312, 254
+STYLE DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+EXSTYLE WS_EX_DLGMODALFRAME
+CAPTION "BibleTime Options"
+FONT 9, "Segoe UI", 400, 0, 0x1
+BEGIN
+    LTEXT           "BibleTime", IDC_TITLE, 10, 8, 292, 14, SS_NOPREFIX
+    LTEXT           "", IDC_SUBTITLE, 10, 24, 292, 10, SS_NOPREFIX
+
+    RTEXT           "&Translation:", IDC_TRANSLATION_LABEL, 10, 46, 58, 9
+    COMBOBOX        IDC_TRANSLATION, 74, 44, 134, 160, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    PUSHBUTTON      "&Import...", IDC_IMPORT, 212, 43, 44, 14
+    PUSHBUTTON      "Re&move", IDC_REMOVE, 260, 43, 42, 14
+
+    RTEXT           "&Hours:", IDC_STATIC_LABEL, 10, 64, 58, 9
+    COMBOBOX        IDC_HOURS, 74, 62, 134, 100, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    RTEXT           "&Appearance:", IDC_STATIC_LABEL, 10, 82, 58, 9
+    COMBOBOX        IDC_THEME, 74, 80, 134, 100, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    RTEXT           "&Layout:", IDC_STATIC_LABEL, 10, 100, 58, 9
+    COMBOBOX        IDC_LAYOUT, 74, 98, 134, 100, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    RTEXT           "T&ypeface:", IDC_STATIC_LABEL, 10, 118, 58, 9
+    COMBOBOX        IDC_TYPEFACE, 74, 116, 134, 100, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    RTEXT           "Text &size:", IDC_STATIC_LABEL, 10, 137, 58, 9
+    CONTROL         "", IDC_TEXTSIZE, "msctls_trackbar32", TBS_HORZ | TBS_BOTTOM | TBS_AUTOTICKS | WS_TABSTOP, 70, 133, 196, 16
+    RTEXT           "100%", IDC_TEXTSIZE_LABEL, 268, 137, 34, 9, SS_NOPREFIX
+    RTEXT           "&Displays:", IDC_STATIC_LABEL, 10, 156, 58, 9
+    COMBOBOX        IDC_DISPLAYS, 74, 154, 134, 100, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+
+    AUTOCHECKBOX    "Sh&ow the time", IDC_SHOWCLOCK, 74, 174, 228, 10, WS_TABSTOP
+    AUTOCHECKBOX    "Prefer &well-known verses (John 3:16 at 3:16)", IDC_FAMOUS, 74, 187, 228, 10, WS_TABSTOP
+    AUTOCHECKBOX    "&Complete the sentence when a verse ends mid-thought", IDC_EXTEND, 74, 200, 228, 10, WS_TABSTOP
+    AUTOCHECKBOX    "&Pad the reference like a clock (John 03:16)", IDC_PAD, 74, 213, 228, 10, WS_TABSTOP
+
+    PUSHBUTTON      "&Restore Defaults", IDC_DEFAULTS, 10, 232, 70, 14
+    DEFPUSHBUTTON   "OK", IDOK, 198, 232, 50, 14
+    PUSHBUTTON      "Cancel", IDCANCEL, 252, 232, 50, 14
+END

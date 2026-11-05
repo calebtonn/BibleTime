@@ -186,6 +186,7 @@ private:
     ResourceLoader loader_;
     std::vector<std::filesystem::path> importDirectories_;
     mutable std::mutex mutex_;
+    std::vector<TranslationInfo> bundledFound_;  // bundled entries the loader has (probed once)
     std::vector<TranslationInfo> found_;
     std::unordered_map<std::string, std::shared_ptr<const Translation>> loaded_;
 };
@@ -193,8 +194,8 @@ private:
 class ImportError : public std::runtime_error {
 public:
     enum class Kind { InvalidFormat, BundledID, TooFewVerses, UnknownBooks };
-    ImportError(Kind kind, std::string message, std::vector<std::string> codes = {})
-        : std::runtime_error(std::move(message)), kind(kind), codes(std::move(codes)) {}
+    ImportError(Kind errorKind, std::string message, std::vector<std::string> bookCodes = {})
+        : std::runtime_error(std::move(message)), kind(errorKind), codes(std::move(bookCodes)) {}
     static ImportError invalidFormat(const std::string& detail);
     static ImportError bundledID(const std::string& id);
     static ImportError tooFewVerses(size_t n);
@@ -248,6 +249,11 @@ const char* title(ThemeChoice);
 const char* title(LayoutStyle);
 const char* title(DisplayMode);
 template <class E> const std::vector<E>& allCases();
+template <> const std::vector<HourStyle>& allCases<HourStyle>();
+template <> const std::vector<ThemeChoice>& allCases<ThemeChoice>();
+template <> const std::vector<LayoutStyle>& allCases<LayoutStyle>();
+template <> const std::vector<TypefaceChoice>& allCases<TypefaceChoice>();
+template <> const std::vector<DisplayMode>& allCases<DisplayMode>();
 
 struct Preferences {
     std::string translation = "kjv";
@@ -313,8 +319,8 @@ struct ClockTime {
     int hour12() const { return hour % 12 == 0 ? 12 : hour % 12; }
     int minuteKey() const { return hour * 60 + minute; }
 
-    /// Ordinal for a local civil date. Foundation's Gregorian calendar switches from Julian on 1582-10-15, and
-    /// the AD era starts on 0001-01-01 Julian, so this is julianDayNumber(y, m, d) - 1721423 for modern dates.
+    /// Ordinal for a local civil date, equal to Foundation's: its Gregorian calendar switches from Julian on
+    /// 1582-10-15, and the value is julianDayNumber(y, m, d) - 1721424 (1970-01-01 -> 719164, 2026-11-03 -> 739924).
     static int64_t dayOrdinalFor(int year, int month, int day);
 };
 
@@ -399,6 +405,9 @@ public:
     /// Loads books.json (required), the curated lists (optional, empty when missing or malformed) and scans
     /// translations. Throws LoadError("BibleTime resource missing: books.json") etc.
     VerseClock(ResourceLoader loader, std::vector<std::filesystem::path> importDirectories);
+    // The catalog refers to canon_, so a VerseClock never moves or copies (hold it in a unique_ptr or optional).
+    VerseClock(const VerseClock&) = delete;
+    VerseClock& operator=(const VerseClock&) = delete;
 
     const Canon& canon() const { return canon_; }
     TranslationCatalog& catalog() { return *catalog_; }
@@ -426,6 +435,8 @@ namespace text {
 std::string toLowerASCII(std::string_view s);
 std::string trimASCII(std::string_view s);  // spaces and tabs only (Swift .whitespaces), plus newlines when `newlines`
 std::string trimASCII(std::string_view s, bool newlines);
+/// Swift's Int(String): optional '+'/'-' then ASCII digits only; nullopt when malformed or out of int64 range.
+std::optional<int64_t> parseInt(std::string_view s);
 /// Read a whole file (binary). nullopt on failure.
 std::optional<std::string> readFile(const std::filesystem::path& path);
 }  // namespace text

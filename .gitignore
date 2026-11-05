@@ -8,3 +8,9 @@ DerivedData/
 Tools/data/
 __pycache__/
 *.pyc
+# Windows: Visual Studio "Open Folder"/CMake state and Inno Setup's default output folder
+.vs/
+out/
+CMakeUserPresets.json
+*.vcxproj.user
+Windows/installer/Output/

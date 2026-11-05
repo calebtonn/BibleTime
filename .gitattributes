@@ -1,0 +1,2 @@
+Windows/installer/*.txt text eol=crlf
+*.ico binary

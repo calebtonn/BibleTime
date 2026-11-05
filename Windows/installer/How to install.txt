@@ -1,0 +1,50 @@
+BibleTime screen saver for Windows
+==================================
+
+BibleTime tells the time through scripture: the chapter is the hour and the
+verse is the minute. At 3:16 you see John 3:16, and a new verse appears every
+minute.
+
+This is the "portable" version. It does not need administrator rights, which
+makes it handy on a work or school computer. (If you can, the regular
+installer, BibleTime-Windows-Setup.exe, is even simpler.)
+
+
+How to install
+--------------
+
+1. Unzip this folder first, if you have not already: right-click the zip file,
+   choose "Extract All...", then click "Extract".
+
+2. Move BibleTime.scr somewhere it can stay, for example your Documents
+   folder. Windows runs it from wherever it is, so do not delete it later.
+
+3. Right-click BibleTime.scr and choose "Install".
+   (On Windows 11 you may need to click "Show more options" first.)
+
+4. If Windows says "Windows protected your PC", click "More info" and then
+   "Run anyway". This appears because BibleTime is a free project and is not
+   signed with a paid certificate. It is safe to continue.
+
+5. The Screen Saver Settings window opens with BibleTime selected.
+   Click "Settings..." to choose the look, the translation and more,
+   then click "OK".
+
+
+How to change the options later
+-------------------------------
+
+Open Settings > Personalization > Lock screen > Screen saver, make sure
+BibleTime is selected, and click "Settings...".
+
+
+How to remove it
+----------------
+
+1. Open the Screen Saver Settings window (see above) and choose another
+   screen saver, or "(None)". Click "OK".
+2. Delete BibleTime.scr.
+
+
+More help, the Mac version and the source code:
+https://github.com/calebtonn/BibleTime
