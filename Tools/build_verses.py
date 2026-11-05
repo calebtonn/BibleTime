@@ -678,7 +678,10 @@ def download_usfx(ebible_id, data_dir):
     os.makedirs(dest_dir, exist_ok=True)
     zip_path = os.path.join(dest_dir, ebible_id + "_usfx.zip")
     log("[download] %s -> %s" % (url, zip_path))
-    with urllib.request.urlopen(url, timeout=60) as resp, open(zip_path, "wb") as f:
+    # eBible.org refuses Python's default User-Agent (HTTP 403), so name this tool instead.
+    request = urllib.request.Request(url, headers={
+        "User-Agent": "BibleTime-data-builder/1.0 (+https://github.com/calebtonn/BibleTime)"})
+    with urllib.request.urlopen(request, timeout=60) as resp, open(zip_path, "wb") as f:
         while True:
             chunk = resp.read(1 << 20)
             if not chunk:
