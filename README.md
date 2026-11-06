@@ -272,4 +272,6 @@ Bible Clock.
 
 The code, build scripts and artwork are MIT licensed; see [LICENSE](LICENSE). That license does not cover
 the Scripture text in `Resources/Translations/`, which is public domain; its provenance is recorded in
-[DATA-LICENSE.md](DATA-LICENSE.md). The text is shipped unmodified apart from the formatting described there.
+[DATA-LICENSE.md](DATA-LICENSE.md). The text is shipped unmodified apart from the formatting described there. The Windows
+version also contains tables generated from the Unicode Character Database, used under the Unicode License v3;
+see [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt).
