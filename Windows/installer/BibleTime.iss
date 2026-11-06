@@ -87,6 +87,10 @@ FinishedLabelNoIcons=BibleTime is installed. You can change how it looks any tim
 
 [Files]
 Source: "{#SourceScr}"; DestDir: "{sys}"; DestName: "BibleTime.scr"; Flags: ignoreversion restartreplace uninsrestartdelete 64bit
+; The license and third-party notices (the Unicode Character Database notice must accompany the program) go in the
+; app folder next to the uninstaller.
+Source: "..\..\LICENSE"; DestDir: "{app}"; DestName: "License.txt"; Flags: ignoreversion
+Source: "..\..\THIRD-PARTY-NOTICES.txt"; DestDir: "{app}"; DestName: "Third-party notices.txt"; Flags: ignoreversion
 
 [Run]
 ; Both run as the user who started Setup (not the elevated administrator account), because the screen saver choice

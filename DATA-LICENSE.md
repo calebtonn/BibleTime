@@ -79,3 +79,12 @@ README).
 `Resources/books.json` contain only Scripture references (book codes,
 chapter and verse numbers) and book names; they are part of the project and
 covered by the MIT license.
+
+## Unicode Character Database (Windows version)
+
+`Windows/src/core/GraphemeTables.inc` and `Windows/tests/GraphemeBreakTest.inc`
+are generated from the Unicode Character Database 15.1.0 by
+`Windows/tools/gen_unicode_tables.py`. That data is © 2023 Unicode®, Inc. and is
+used under the Unicode License v3, whose full text is in
+[THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt). The Windows installer and
+portable zip ship that file alongside the screen saver.

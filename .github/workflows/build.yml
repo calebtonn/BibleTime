@@ -316,6 +316,8 @@ jobs:
           echo "installed: $(chosen)"
           UNINS="/c/Program Files/BibleTime/unins000.exe"
           test -f "$UNINS"
+          grep -q "UNICODE LICENSE V3" "/c/Program Files/BibleTime/Third-party notices.txt"
+          test -f "/c/Program Files/BibleTime/License.txt"
           "$UNINS" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
           wait_for "BibleTime.scr removed" sh -c "! test -f '$SYS_SCR'"
           wait_for "screen saver choice cleared" sh -c "! reg query 'HKCU\Control Panel\Desktop' /v SCRNSAVE.EXE 2>/dev/null | grep -qi BibleTime.scr"
@@ -328,8 +330,15 @@ jobs:
           New-Item -ItemType Directory -Force $dir | Out-Null
           Copy-Item build/windows/bin/BibleTime.scr $dir/
           # Windows line endings so Notepad on older Windows 10 shows the text properly, whatever git did on checkout.
-          $text = [IO.File]::ReadAllText("Windows/installer/How to install.txt") -replace "`r?`n", "`r`n"
-          [IO.File]::WriteAllText("$dir/How to install.txt", $text)
+          $texts = @{
+            "Windows/installer/How to install.txt" = "How to install.txt"
+            "LICENSE" = "License.txt"
+            "THIRD-PARTY-NOTICES.txt" = "Third-party notices.txt"
+          }
+          foreach ($source in $texts.Keys) {
+            $text = [IO.File]::ReadAllText($source) -replace "`r?`n", "`r`n"
+            [IO.File]::WriteAllText("$dir/$($texts[$source])", $text)
+          }
           Compress-Archive -Path "$dir/*" -DestinationPath build/windows/BibleTime-Windows-Portable.zip -Force
           Get-Item build/windows/BibleTime-Windows-Portable.zip | Format-List Name, Length
 
